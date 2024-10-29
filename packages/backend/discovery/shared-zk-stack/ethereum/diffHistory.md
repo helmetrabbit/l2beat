@@ -1,3 +1,89 @@
+Generated with discovered.json: 0x81e5f6ce83936ab2b8050a42b6eba27335df330f
+
+# Diff at Tue, 29 Oct 2024 14:17:30 GMT:
+
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@133f6bdd684278299c8df162b697d52fa91f3aef block: 21064368
+- current block number: 21071831
+
+## Description
+
+Config related.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 21064368 (main branch discovery), not current.
+
+```diff
+-   Status: DELETED
+    contract Safe (0x2e5BE1479cF661eeD9F526b7926eA87F6A5dD6a9)
+    +++ description: None
+```
+
+```diff
+    contract ValidatorTimelock (0x5D8ba173Dc6C3c90C8f7C04C9288BeF5FDbAd06E) {
+    +++ description: None
+      values.sophonTenthBatchTS:
+-        0
+      values.zeronetworkTenthBatchTS:
+-        1729719755
++++ description: If non-zero, the third batch has been posted.
++++ severity: MEDIUM
+      values.Project__ThirdBatchTS:
++        0
++++ description: If non-zero, the third batch has been posted.
++++ severity: MEDIUM
+      values.sophonThirdBatchTS:
++        1729673999
++++ description: If non-zero, the third batch has been posted.
++++ severity: MEDIUM
+      values.zeronetworkThirdBatchTS:
++        1729683215
+      fieldMeta.zeronetworkTenthBatchTS:
+-        {"severity":"MEDIUM","description":"If non-zero, the first batch has been posted."}
+      fieldMeta.sophonTenthBatchTS:
+-        {"severity":"MEDIUM","description":"If non-zero, the first batch has been posted."}
+      fieldMeta.zeronetworkThirdBatchTS:
++        {"severity":"MEDIUM","description":"If non-zero, the third batch has been posted."}
+      fieldMeta.sophonThirdBatchTS:
++        {"severity":"MEDIUM","description":"If non-zero, the third batch has been posted."}
+      fieldMeta.Project__ThirdBatchTS:
++        {"severity":"MEDIUM","description":"If non-zero, the third batch has been posted."}
+    }
+```
+
+```diff
+-   Status: DELETED
+    contract Safe (0x7F3EaB9ccf1d8B9705F7ede895d3b4aC1b631063)
+    +++ description: None
+```
+
+```diff
+-   Status: DELETED
+    contract ChainAdmin (0xA1f75f491f630037C4Ccaa2bFA22363CEC05a661)
+    +++ description: None
+```
+
+```diff
+-   Status: DELETED
+    contract ChainAdmin (0xCA8faaF5BA885fEC8C2c8CD49bADAa7589D173b3)
+    +++ description: None
+```
+
+```diff
+-   Status: DELETED
+    contract ChainAdmin (0xE1eeA4D6443b19D373Fe99De838b930Ef0ac2Ad3)
+    +++ description: None
+```
+
+```diff
+-   Status: DELETED
+    contract Safe (0xe4644b6d106A18062344c0A853666bc0B8f052d1)
+    +++ description: None
+```
+
 Generated with discovered.json: 0x49be4a26135f66dff4b13920e7b71330ccc21716
 
 # Diff at Mon, 28 Oct 2024 13:16:57 GMT:
