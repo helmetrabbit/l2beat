@@ -40,6 +40,8 @@ export abstract class Indexer {
     Retries.exponentialBackOff({
       initialTimeoutMs: 1000,
       maxAttempts: Infinity,
+      // WARNING: Change only if you know what you are doing
+      // Alerting system in Kibana requires Indexer to log sth once an hour
       maxTimeoutMs: 1 * 60 * 60_000,
     })
 
@@ -274,6 +276,7 @@ export abstract class Indexer {
         this.dispatch({ type: 'UpdateFailed', fatal: true })
       } else {
         this.dispatch({ type: 'UpdateSucceeded', from, newHeight })
+        this.logMetrics(newHeight, effect.targetHeight)
         this.updateRetryStrategy.clear()
       }
     } catch (error) {
@@ -295,6 +298,7 @@ export abstract class Indexer {
           attempt,
         })
       }
+      this.logMetrics(this.state.height, effect.targetHeight)
       this.dispatch({ type: 'UpdateFailed', fatal })
     }
   }
@@ -396,7 +400,7 @@ export abstract class Indexer {
 
   // #endregion
   // #region Common methods
-
+  //
   private async executeSetSafeHeight(
     effect: SetSafeHeightEffect,
   ): Promise<void> {
@@ -405,6 +409,10 @@ export abstract class Indexer {
       child.notifyUpdate(this, effect.safeHeight),
     )
     await this.setSafeHeight(effect.safeHeight)
+  }
+
+  private logMetrics(current: number, target: number): void {
+    this.logger.info('Metrics', { delay: target - current, current, target })
   }
 
   // #endregion

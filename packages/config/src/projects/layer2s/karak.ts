@@ -29,14 +29,8 @@ export const karak: Layer2 = opStackL2({
       ],
     },
     activityDataSource: 'Blockchain RPC',
-    architectureImage: 'opstack',
   },
   rpcUrl: 'https://rpc.karak.network/',
-  finality: {
-    type: 'OPStack',
-    lag: 0,
-    stateUpdate: 'disabled',
-  },
   genesisTimestamp: new UnixTime(1703226695), //First sequencer transaction
   isNodeAvailable: true,
   discoveryDrivenData: true,

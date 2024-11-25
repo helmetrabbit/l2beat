@@ -214,6 +214,13 @@ export const optimism: Layer2 = {
         address: EthereumAddress('0x467194771dAe2967Aef3ECbEDD3Bf9a310C76C65'),
         sinceTimestamp: new UnixTime(1625675779),
         source: 'external',
+        bridgedUsing: {
+          bridges: [
+            {
+              name: 'Canonically (external escrow)',
+            },
+          ],
+        },
         tokens: ['DAI'],
         description: 'DAI Vault for custom DAI Gateway managed by MakerDAO.',
       }),
@@ -223,6 +230,13 @@ export const optimism: Layer2 = {
         sinceTimestamp: new UnixTime(1620680982),
         tokens: ['SNX'],
         source: 'external',
+        bridgedUsing: {
+          bridges: [
+            {
+              name: 'Canonically (external escrow)',
+            },
+          ],
+        },
         description: 'SNX Vault for custom SNX Gateway managed by Synthetix.',
       }),
       {
@@ -231,6 +245,13 @@ export const optimism: Layer2 = {
         sinceTimestamp: new UnixTime(1610668212),
         tokens: ['SNX'],
         source: 'external',
+        bridgedUsing: {
+          bridges: [
+            {
+              name: 'Canonically (external escrow)',
+            },
+          ],
+        },
         isHistorical: true,
         chain: 'ethereum',
       },
@@ -240,6 +261,13 @@ export const optimism: Layer2 = {
         sinceTimestamp: new UnixTime(1620680934),
         tokens: ['SNX'],
         source: 'external',
+        bridgedUsing: {
+          bridges: [
+            {
+              name: 'Canonically (external escrow)',
+            },
+          ],
+        },
         isHistorical: true,
         chain: 'ethereum',
       },
@@ -247,6 +275,13 @@ export const optimism: Layer2 = {
         address: EthereumAddress('0x76943C0D61395d8F2edF9060e1533529cAe05dE6'),
         tokens: ['wstETH'],
         source: 'external',
+        bridgedUsing: {
+          bridges: [
+            {
+              name: 'Canonically (external escrow)',
+            },
+          ],
+        },
         description:
           'wstETH Vault for custom wstETH Gateway. Fully controlled by Lido governance.',
       }),
@@ -341,11 +376,13 @@ export const optimism: Layer2 = {
     ],
     coingeckoPlatform: 'optimistic-ethereum',
   },
-  dataAvailability: addSentimentToDataAvailability({
-    layers: [DA_LAYERS.ETH_BLOBS_OR_CALLLDATA],
-    bridge: DA_BRIDGES.ENSHRINED,
-    mode: DA_MODES.TRANSACTION_DATA_COMPRESSED,
-  }),
+  dataAvailability: [
+    addSentimentToDataAvailability({
+      layers: [DA_LAYERS.ETH_BLOBS_OR_CALLLDATA],
+      bridge: DA_BRIDGES.ENSHRINED,
+      mode: DA_MODES.TRANSACTION_DATA_COMPRESSED,
+    }),
+  ],
   riskView: {
     stateValidation: {
       ...RISK_VIEW.STATE_FP_INT,
@@ -578,7 +615,7 @@ export const optimism: Layer2 = {
       'Address allowed to pause withdrawals or blacklist dispute games in case of an emergency. It is controlled by the Security Council multisig, but a module allows the Foundation to act through it. The Security Council can disable the module if the Foundation acts maliciously.',
     ),
     ...discovery.getMultisigPermission(
-      'OptimismFoundationMultisig_1',
+      'OpFoundationUpgradeSafe',
       'Member of the SuperchainProxyAdminOwner.',
     ),
     ...discovery.getMultisigPermission(
@@ -592,7 +629,7 @@ export const optimism: Layer2 = {
       ],
     ),
     ...discovery.getMultisigPermission(
-      'FoundationMultisig_2',
+      'OpFoundationOperationsSafe',
       'This address is the owner of the following contracts: SystemConfig.',
     ),
     discovery.contractAsPermissioned(
@@ -692,7 +729,7 @@ export const optimism: Layer2 = {
         ...l1Upgradeability,
       }),
       discovery.getContractDetails('LivenessModule', {
-        description: `The LivenessModule is a Gnosis Safe nodule used to remove Security Council members that have been inactive for ${livenessInterval} while making sure that the threshold remains above 75%. If the number of members falls below 8, the OptimismFoundationMultisig_1 takes ownership of the multisig.`,
+        description: `The LivenessModule is a Gnosis Safe nodule used to remove Security Council members that have been inactive for ${livenessInterval} while making sure that the threshold remains above 75%. If the number of members falls below 8, the OpFoundationUpgradeSafe takes ownership of the multisig.`,
         ...l1Upgradeability,
       }),
     ],
@@ -786,7 +823,7 @@ export const optimism: Layer2 = {
     ],
   },
   upgradesAndGovernance:
-    'All contracts are upgradable by the `SuperchainProxyAdmin` which is controlled by a 2/2 multisig composed by the Optimism Foundation and a Security Council. The Guardian role is assigned to the Security Council multisig, with a Safe Module that allows the Foundation to act through it to stop withdrawals in the whole Superchain, blacklist dispute games, or deactivate the fault proof system entirely in case of emergencies. The Security Council can remove the module if the Foundation becomes malicious. The single Sequencer actor can be modified by the `FoundationMultisig_2` via the `SystemConfig` contract. The SuperchainProxyAdminOwner can recover dispute bonds in case of bugs that would distribute them incorrectly. \n\nAt the moment, for regular upgrades, the DAO signals its intent by voting on upgrade proposals, but has no direct control over the upgrade process.',
+    'All contracts are upgradable by the `SuperchainProxyAdmin` which is controlled by a 2/2 multisig composed by the Optimism Foundation and a Security Council. The Guardian role is assigned to the Security Council multisig, with a Safe Module that allows the Foundation to act through it to stop withdrawals in the whole Superchain, blacklist dispute games, or deactivate the fault proof system entirely in case of emergencies. The Security Council can remove the module if the Foundation becomes malicious. The single Sequencer actor can be modified by the `OpFoundationOperationsSafe` via the `SystemConfig` contract. The SuperchainProxyAdminOwner can recover dispute bonds in case of bugs that would distribute them incorrectly. \n\nAt the moment, for regular upgrades, the DAO signals its intent by voting on upgrade proposals, but has no direct control over the upgrade process.',
   milestones: [
     {
       name: 'Fallback to permissioned proposals for 26 days.',

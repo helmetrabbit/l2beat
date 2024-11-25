@@ -164,6 +164,13 @@ export const kroma: Layer2 = {
         sinceTimestamp: new UnixTime(1700122827),
         tokens: ['USDC'],
         source: 'external',
+        bridgedUsing: {
+          bridges: [
+            {
+              name: 'Canonically (external escrow)',
+            },
+          ],
+        },
         description: 'Main entry point for users depositing USDC.',
       }),
     ],
@@ -209,16 +216,22 @@ export const kroma: Layer2 = {
       },
     ],
     finality: {
-      type: 'OPStack',
+      type: 'OPStack-blob',
+      // timestamp of the first blob tx
+      minTimestamp: new UnixTime(1714032407),
+      l2BlockTimeSeconds: 2,
+      genesisTimestamp: new UnixTime(1693880389),
       lag: 0,
       stateUpdate: 'disabled',
     },
   },
-  dataAvailability: addSentimentToDataAvailability({
-    layers: [DA_LAYERS.ETH_BLOBS_OR_CALLLDATA],
-    bridge: DA_BRIDGES.ENSHRINED,
-    mode: DA_MODES.TRANSACTION_DATA,
-  }),
+  dataAvailability: [
+    addSentimentToDataAvailability({
+      layers: [DA_LAYERS.ETH_BLOBS_OR_CALLLDATA],
+      bridge: DA_BRIDGES.ENSHRINED,
+      mode: DA_MODES.TRANSACTION_DATA,
+    }),
+  ],
   riskView: {
     stateValidation: {
       ...RISK_VIEW.STATE_FP_INT_ZK,

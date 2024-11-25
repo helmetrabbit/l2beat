@@ -88,7 +88,11 @@ export const blast: Layer2 = opStackL2({
     ],
   },
   finality: {
-    type: 'OPStack',
+    type: 'OPStack-blob',
+    // timestamp of the first blob tx
+    minTimestamp: new UnixTime(1716846455),
+    l2BlockTimeSeconds: 2,
+    genesisTimestamp: new UnixTime(1708809815),
     lag: 0,
     stateUpdate: 'disabled',
   },
@@ -101,18 +105,31 @@ export const blast: Layer2 = opStackL2({
         'Pre-launch Blast Vault that keeps stETH. Funds from this Vault can be migrated to Blast bridge.',
       tokens: ['stETH'],
       source: 'external',
+      bridgedUsing: {
+        bridges: [
+          {
+            name: 'Canonically (external escrow)',
+          },
+        ],
+      },
     }),
     discovery.getEscrowDetails({
       address: EthereumAddress('0x98078db053902644191f93988341E31289E1C8FE'),
       name: 'Interest-bearing ETH Vault',
       tokens: ['ETH', 'stETH'],
       source: 'external',
+      bridgedUsing: {
+        bridges: [
+          {
+            name: 'Canonically (external escrow)',
+          },
+        ],
+      },
       description:
         'Escrow for ETH that is invested into a yield-bearing contracts such as stETH.',
     }),
   ],
   isNodeAvailable: true,
-  usesBlobs: true,
   associatedTokens: ['BLAST'],
   nodeSourceLink: 'https://github.com/blast-io/blast',
   discoveryDrivenData: true,
