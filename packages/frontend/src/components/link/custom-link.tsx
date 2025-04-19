@@ -1,4 +1,5 @@
-import { type VariantProps, cva } from 'class-variance-authority'
+import type { VariantProps } from 'class-variance-authority'
+import { cva } from 'class-variance-authority'
 import NextLink from 'next/link'
 import React from 'react'
 
@@ -18,8 +19,7 @@ export const linkVariants = cva(
   {
     variants: {
       variant: {
-        primary:
-          'text-blue-700 hover:text-blue-550 dark:text-blue-500 dark:hover:text-blue-550',
+        primary: 'text-link hover:text-blue-550',
         danger: 'text-red-300 hover:text-red-700',
         plain: 'text-primary',
       },
@@ -38,16 +38,26 @@ export const linkVariants = cva(
 export function CustomLink({
   variant,
   underline,
-  children,
   className,
   ...rest
 }: CustomLinkProps) {
+  const isOutLink = rest.href.startsWith('http')
+
+  if (isOutLink) {
+    return (
+      <a
+        target="_blank"
+        rel="noreferrer noopener"
+        className={linkVariants({ variant, underline, className })}
+        {...rest}
+      />
+    )
+  }
+
   return (
     <NextLink
       className={linkVariants({ variant, underline, className })}
       {...rest}
-    >
-      {children}
-    </NextLink>
+    />
   )
 }

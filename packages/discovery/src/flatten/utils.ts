@@ -1,8 +1,8 @@
 import { createHash } from 'crypto'
 import { Hash256 } from '@l2beat/shared-pure'
-import { ContractSources } from '../discovery/source/SourceCodeService'
-import { ContractSource } from '../utils/IEtherscanClient'
-import { FileContent } from './ParsedFilesManager'
+import type { PerContractSource } from '../discovery/source/SourceCodeService'
+import type { ContractSource } from '../utils/IEtherscanClient'
+import type { FileContent } from './ParsedFilesManager'
 import { flattenStartingFrom } from './flatten'
 import { format } from './format'
 
@@ -17,42 +17,37 @@ export interface HashedFileContent {
   content: string
 }
 
+const cache: Map<string, Hash256> = new Map()
+
 // Flatten the first (non-proxy) source file.
 // This functions is used to find "matching" contract templates.
 // This handles gross majority of cases and works very well
 // even when there are multiple sources.
 // In the future it may be reimplemented to support
 // all sources for comparison with templates.
-export function flattenFirstSource(
-  sources: ContractSources,
-): string | undefined {
+export function hashFirstSource(
+  isVerified: boolean,
+  perContractSources: PerContractSource[],
+): Hash256 | undefined {
+  if (!isVerified || perContractSources.length < 1) {
+    return undefined
+  }
+
   const source =
-    sources.sources.length === 1 ? sources.sources[0] : sources.sources[1]
+    perContractSources.length === 1
+      ? perContractSources[0]
+      : perContractSources[1]
 
   if (source === undefined) {
     throw Error('No sources found')
   }
 
-  const input: FileContent[] = Object.entries(source.source.files)
-    .map(([fileName, content]) => ({
-      path: fileName,
-      content,
-    }))
-    .filter((e) => e.path.endsWith('.sol'))
-
-  if (input.length === 0) {
-    return undefined
-  }
-
-  const output = flattenStartingFrom(
-    source.name,
-    input,
-    source.source.remappings,
-  )
-  return output
+  return source.hash !== undefined ? Hash256(source.hash) : undefined
 }
 
-export function flatteningHash(source: ContractSource): string | undefined {
+export function contractFlatteningHash(
+  source: ContractSource,
+): string | undefined {
   if (!source.isVerified) {
     return undefined
   }
@@ -64,11 +59,29 @@ export function flatteningHash(source: ContractSource): string | undefined {
     }))
     .filter((e) => e.path.endsWith('.sol'))
 
-  const flat = flattenStartingFrom(source.name, input, source.remappings)
-  return sha2_256bit(formatIntoHashable(flat))
+  const hash =
+    input.length === 0
+      ? sha2_256bit(Object.values(source.files).join('\n'))
+      : flatteningHash(
+          flattenStartingFrom(source.name, input, source.remappings),
+        )
+
+  return hash
 }
 
-export function formatIntoHashable(source: string) {
+export function flatteningHash(source: string): Hash256 {
+  const hashed = sha2_256bit(source)
+  const cached = cache.get(hashed)
+  if (cached !== undefined) {
+    return cached
+  }
+
+  const value = sha2_256bit(formatIntoHashable(source))
+  cache.set(hashed, value)
+  return value
+}
+
+function formatIntoHashable(source: string) {
   let formatted = format(source)
 
   if (formatted.startsWith('pragma')) {
@@ -84,44 +97,6 @@ export function formatIntoHashable(source: string) {
 
 export function sha2_256bit(str: string): Hash256 {
   return Hash256(`0x${createHash('sha256').update(str).digest('hex')}`)
-}
-
-export function removeComments(source: string): string {
-  let result = ''
-  let isInSingleLineComment = false
-  let isInMultiLineComment = false
-
-  for (let i = 0; i < source.length; i++) {
-    if (isInSingleLineComment && source[i] === '\n') {
-      isInSingleLineComment = false
-      result += source[i] // Keep newline characters
-    } else if (
-      isInMultiLineComment &&
-      source[i] === '*' &&
-      source[i + 1] === '/'
-    ) {
-      isInMultiLineComment = false
-      i++ // Skip the '/'
-    } else if (
-      !isInMultiLineComment &&
-      source[i] === '/' &&
-      source[i + 1] === '/'
-    ) {
-      isInSingleLineComment = true
-      i++ // Skip the second '/'
-    } else if (
-      !isInSingleLineComment &&
-      source[i] === '/' &&
-      source[i + 1] === '*'
-    ) {
-      isInMultiLineComment = true
-      i++ // Skip the '*'
-    } else if (!isInSingleLineComment && !isInMultiLineComment) {
-      result += source[i]
-    }
-  }
-
-  return result
 }
 
 export function buildSimilarityHashmap(input: string): HashedChunks[] {

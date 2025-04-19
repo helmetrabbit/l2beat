@@ -1,11 +1,10 @@
 import { getDefaultMetadata } from '~/utils/metadata'
 
 import { MainPageHeader } from '~/components/main-page-header'
+import { TableFilterContextProvider } from '~/components/table/filters/table-filter-context'
 import { getScalingRiskEntries } from '~/server/features/scaling/risks/get-scaling-risk-entries'
-import { ScalingFilterContextProvider } from '../_components/scaling-filter-context'
 import { ScalingRiskTables } from './_components/scaling-risk-tables'
 
-export const revalidate = 600
 export const metadata = getDefaultMetadata({
   openGraph: {
     url: '/scaling/risk',
@@ -18,9 +17,9 @@ export default async function Page() {
   return (
     <>
       <MainPageHeader>Risk Analysis</MainPageHeader>
-      <ScalingFilterContextProvider>
+      <TableFilterContextProvider>
         <ScalingRiskTables {...entries} />
-      </ScalingFilterContextProvider>
+      </TableFilterContextProvider>
     </>
   )
 }

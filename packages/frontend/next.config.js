@@ -3,6 +3,15 @@ import './src/env.js'
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  experimental: {
+    optimizePackageImports: [
+      // Do not put @l2beat/backend or @l2beat/config here!
+      '@l2beat/database',
+      '@l2beat/discovery',
+      '@l2beat/shared-pure',
+      '@l2beat/shared',
+    ],
+  },
   images: {
     domains: [
       'assets.coingecko.com',
@@ -47,11 +56,6 @@ const nextConfig = {
         permanent: false,
       },
       {
-        source: '/bridges/tvl',
-        destination: '/bridges/summary',
-        permanent: false,
-      },
-      {
         source: '/bridges',
         destination: '/bridges/summary',
         permanent: false,
@@ -70,13 +74,33 @@ const nextConfig = {
       // Renamed projects
       // TODO: Move once we migrate detail pages to Next.js
       {
-        source: '/scaling/projects/zksync',
-        destination: '/scaling/projects/zksync-lite',
+        source: '/scaling/projects/zksync/:path*',
+        destination: '/scaling/projects/zksync-lite/:path*',
         permanent: true,
       },
       {
-        source: '/scaling/projects/zksync2',
-        destination: '/scaling/projects/zksync-era',
+        source: '/scaling/projects/zksync2/:path*',
+        destination: '/scaling/projects/zksync-era/:path*',
+        permanent: true,
+      },
+      {
+        source: '/scaling/projects/optimism/:path*',
+        destination: '/scaling/projects/op-mainnet/:path*',
+        permanent: true,
+      },
+      {
+        source: '/data-availability/projects/espressoDA/espressoDA',
+        destination: '/data-availability/projects/espresso-da/espresso-da',
+        permanent: true,
+      },
+      {
+        source: '/zk-catalog/SP1Blobstream/:path*',
+        destination: '/zk-catalog/sp1-blobstream/:path*',
+        permanent: true,
+      },
+      {
+        source: '/zk-catalog/SP1Vector/:path*',
+        destination: '/zk-catalog/sp1-vector/:path*',
         permanent: true,
       },
       // Legacy pathnames
@@ -91,38 +115,23 @@ const nextConfig = {
         permanent: true,
       },
       {
+        source: '/scaling/tvl',
+        destination: '/scaling/tvs',
+        permanent: true,
+      },
+      {
         source: '/scaling/detailedTvl',
-        destination: '/scaling/tvl',
+        destination: '/scaling/tvs',
         permanent: true,
       },
       {
-        source: '/project/layer2.finance',
-        destination: '/scaling/projects/layer2finance',
+        source: '/scaling/projects/:name/tvl-breakdown',
+        destination: '/scaling/projects/:name/tvs-breakdown',
         permanent: true,
       },
       {
-        source: '/project/leverj',
-        destination: '/scaling/projects/gluon',
-        permanent: true,
-      },
-      {
-        source: '/projects/leverj',
-        destination: '/scaling/projects/gluon',
-        permanent: true,
-      },
-      {
-        source: '/projects/fuel',
-        destination: '/scaling/projects/fuelv1',
-        permanent: true,
-      },
-      {
-        source: '/projects/zkswapv2',
-        destination: '/scaling/projects/zkspace',
-        permanent: true,
-      },
-      {
-        source: '/projects/deversifi',
-        destination: '/scaling/projects/rhinofi',
+        source: '/data-availability/projects/:name/dac',
+        destination: '/scaling/projects/:name',
         permanent: true,
       },
     ]
@@ -201,9 +210,7 @@ const nextConfig = {
 }
 
 function createNextConfig() {
-  const plugins = [createPlausibleProxyPlugin()]
-
-  return plugins.reduce((config, plugin) => plugin(config), nextConfig)
+  return createPlausibleProxyPlugin()(nextConfig)
 }
 
 // biome-ignore lint/style/noDefaultExport: config file

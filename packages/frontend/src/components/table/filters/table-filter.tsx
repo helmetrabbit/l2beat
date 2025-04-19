@@ -1,110 +1,125 @@
 'use client'
-import { assert } from '@l2beat/shared-pure'
+import { CommandDialog } from '~/components/core/command'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '~/components/core/select'
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+  PopoverTrigger,
+  popoverTriggerClasses,
+} from '~/components/core/popover'
+import { VerticalSeparator } from '~/components/core/vertical-separator'
+import { useIsMobile } from '~/hooks/use-is-mobile'
 import { CloseIcon } from '~/icons/close'
 import { cn } from '~/utils/cn'
+import type { FilterableValueId } from './filterable-value'
+import { filterIdToLabel } from './filterable-value'
+import { useTableFilterContext } from './table-filter-context'
+import {
+  TableFilterInternalContextProvider,
+  useTableFilterInternalContext,
+} from './table-filter-internal-context'
+import { TableFilterValue } from './table-filter-value'
+import { TableFilterValueMenu } from './table-filter-value-menu'
+import type { FilterValue } from './use-filter-state'
 
-const UNDEFINED_VALUE = 'undefined-value'
-
-interface Option<T extends string> {
-  label: string
-  value: T | undefined
+interface Filter extends FilterValue {
+  id: FilterableValueId
 }
 
-interface Props<T extends string> {
-  title: string
-  options: Option<T>[]
-  value: T | undefined
-  onValueChange: (option: T | undefined) => void
+interface Props {
+  filter: Filter
+  possibleValues: string[]
 }
 
-export function TableFilter<T extends string>(props: Props<T>) {
-  if (props.value) {
-    return <SelectedValue {...props} />
-  }
+export function TableFilter({ filter, possibleValues }: Props) {
+  const { dispatch } = useTableFilterContext()
 
-  return <TableFilterSelect {...props} />
-}
-
-function SelectedValue<T extends string>({
-  options,
-  value,
-  onValueChange,
-}: Props<T>) {
-  const option = options.find((option) => option.value === value)
-  assert(option, 'Option not found')
   return (
-    <button
-      onClick={() => onValueChange(undefined)}
+    <div
       className={cn(
-        'flex h-8 cursor-pointer select-none items-center justify-center gap-1.5 whitespace-pre rounded-lg px-2.5 text-xs font-medium text-brand outline-none transition-colors md:text-sm',
-        'sidebar:bg-surface-primary sidebar:hover:bg-surface-tertiary sidebar:main-page-card:bg-surface-secondary',
+        'flex h-8 w-max select-none items-center rounded-lg bg-surface-primary text-xs font-medium leading-none primary-card:bg-surface-secondary md:text-sm',
+        'animate-in fade-in-0 zoom-in-95 slide-in-from-left-2',
       )}
     >
-      <span>{option.label}</span>
-      <div className="inline-flex size-3 items-center justify-center rounded-sm bg-current">
-        <CloseIcon className="size-2.5 fill-white dark:fill-black dark:group-hover:fill-gray-950" />
+      <div className="flex h-full items-center justify-center pl-2.5 pr-2">
+        {filterIdToLabel[filter.id]}
       </div>
-    </button>
+      <VerticalSeparator className="h-[30px]" />
+      <button
+        className="flex h-full items-center justify-center rounded-none px-2 font-medium focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand"
+        onClick={() => {
+          dispatch({
+            type: 'setInversed',
+            payload: { id: filter.id, value: !filter.inversed },
+          })
+        }}
+      >
+        {operatorLabel(filter)}
+      </button>
+      <VerticalSeparator className="h-[30px]" />
+      <TableFilterInternalContextProvider>
+        <TableFilterValuePart filter={filter} possibleValues={possibleValues} />
+      </TableFilterInternalContextProvider>
+      <VerticalSeparator className="h-[30px]" />
+      <button
+        className="h-full rounded-r-lg pl-2 pr-2.5 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand"
+        onClick={() => dispatch({ type: 'remove', payload: { id: filter.id } })}
+      >
+        <div className="inline-flex size-3 items-center justify-center rounded-sm bg-brand">
+          <CloseIcon className="size-2.5 fill-white dark:fill-black dark:group-hover:fill-gray-950" />
+        </div>
+      </button>
+    </div>
   )
 }
 
-function TableFilterSelect<T extends string>({
-  title,
-  options,
-  value,
-  onValueChange,
-}: Props<T>) {
-  // Select component does not support undefined values
-  // so we need to replace them with a special value
-  // that will be handled by the onValueChange handler
-  const mappedOptions = replaceUndefined(options)
+function TableFilterValuePart({ filter, possibleValues }: Props) {
+  const { open, setOpen, onEscapeKeyDown } = useTableFilterInternalContext()
+  const isMobile = useIsMobile()
+
+  if (isMobile) {
+    return (
+      <>
+        <button
+          onClick={() => setOpen(true)}
+          className={cn(popoverTriggerClasses, 'h-8')}
+        >
+          <TableFilterValue values={filter.values} filterId={filter.id} />
+        </button>
+        <CommandDialog
+          open={open}
+          onOpenChange={setOpen}
+          title={'Filters'}
+          description={'Select filters to apply'}
+        >
+          <TableFilterValueMenu filterId={filter.id} values={possibleValues} />
+        </CommandDialog>
+      </>
+    )
+  }
 
   return (
-    <Select
-      value={value ?? ''}
-      onValueChange={(v) => {
-        const mappedValue = (v === UNDEFINED_VALUE ? undefined : v) as
-          | T
-          | undefined
-        onValueChange(mappedValue)
-      }}
-      disabled={options.length === 0}
-    >
-      <SelectTrigger>
-        <SelectValue placeholder={title} />
-      </SelectTrigger>
-      <SelectContent className="flex flex-col" align="start">
-        {mappedOptions.map((option) => (
-          <SelectItem key={option.label} value={option.value}>
-            {option.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverAnchor className="h-full" />
+      <PopoverTrigger className="flex h-full items-center justify-center rounded-none px-2 font-medium">
+        <TableFilterValue values={filter.values} filterId={filter.id} />
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="p-0"
+        side="bottom"
+        onEscapeKeyDown={onEscapeKeyDown}
+      >
+        <TableFilterValueMenu filterId={filter.id} values={possibleValues} />
+      </PopoverContent>
+    </Popover>
   )
 }
 
-function replaceUndefined<T extends string>(
-  options: Option<T>[],
-): {
-  label: string
-  value: T
-}[] {
-  return options.map((option) => {
-    if (option.value === undefined) {
-      return { label: option.label, value: UNDEFINED_VALUE as T }
-    }
+function operatorLabel(filter: Filter) {
+  if (filter.inversed) {
+    return 'is not'
+  }
 
-    return {
-      label: option.label,
-      value: option.value,
-    }
-  })
+  return filter.values.length > 1 ? 'is any of' : 'is'
 }

@@ -1,18 +1,18 @@
 import { Logger } from '@l2beat/backend-tools'
-import { AmountRecord, Database } from '@l2beat/database'
-import { TotalSupplyEntry, UnixTime } from '@l2beat/shared-pure'
+import type { AmountRecord, Database } from '@l2beat/database'
+import { type TotalSupplyEntry, UnixTime } from '@l2beat/shared-pure'
 import { expect, mockObject } from 'earl'
 import { mockDatabase } from '../../../test/database'
-import { IndexerService } from '../../../tools/uif/IndexerService'
+import type { IndexerService } from '../../../tools/uif/IndexerService'
 import { _TEST_ONLY_resetUniqueIds } from '../../../tools/uif/ids'
-import {
+import type {
   Configuration,
   RemovalConfiguration,
 } from '../../../tools/uif/multi/types'
-import { AmountService } from '../services/AmountService'
-import { SyncOptimizer } from '../utils/SyncOptimizer'
+import type { AmountService } from '../services/AmountService'
+import type { SyncOptimizer } from '../utils/SyncOptimizer'
 import { ChainAmountIndexer } from './ChainAmountIndexer'
-import { ChainAmountConfig } from './types'
+import type { ChainAmountConfig } from './types'
 
 describe(ChainAmountIndexer.name, () => {
   beforeEach(() => {
@@ -23,7 +23,7 @@ describe(ChainAmountIndexer.name, () => {
     it('fetches amounts and saves them to DB', async () => {
       const from = 100
       const to = 1000
-      const timestampToSync = new UnixTime(200)
+      const timestampToSync = UnixTime(200)
       const syncOptimizer = mockObject<SyncOptimizer>({
         getTimestampToSync: () => timestampToSync,
       })
@@ -75,13 +75,13 @@ describe(ChainAmountIndexer.name, () => {
         amount('a', 200, 123),
       ])
 
-      expect(safeHeight).toEqual(timestampToSync.toNumber())
+      expect(safeHeight).toEqual(timestampToSync)
     })
 
     it('returns if optimized timestamp later than to', async () => {
       const from = 100
       const to = 1000
-      const timestampToSync = new UnixTime(to + 100)
+      const timestampToSync = UnixTime(to + 100)
 
       const syncOptimizer = mockObject<SyncOptimizer>({
         getTimestampToSync: () => timestampToSync,
@@ -120,7 +120,7 @@ describe(ChainAmountIndexer.name, () => {
       const indexer = new ChainAmountIndexer({
         amountService: mockObject<AmountService>({}),
         syncOptimizer: mockObject<SyncOptimizer>({
-          getTimestampToSync: () => new UnixTime(1001),
+          getTimestampToSync: () => UnixTime(1001),
         }),
         chain: 'chain',
         parents: [],
@@ -170,11 +170,11 @@ describe(ChainAmountIndexer.name, () => {
 
       expect(
         amountRepository.deleteByConfigInTimeRange,
-      ).toHaveBeenNthCalledWith(1, 'a', new UnixTime(100), new UnixTime(200))
+      ).toHaveBeenNthCalledWith(1, 'a', UnixTime(100), UnixTime(200))
 
       expect(
         amountRepository.deleteByConfigInTimeRange,
-      ).toHaveBeenLastCalledWith('b', new UnixTime(200), new UnixTime(300))
+      ).toHaveBeenLastCalledWith('b', UnixTime(200), UnixTime(300))
     })
   })
 })
@@ -186,7 +186,7 @@ function amount(
 ): AmountRecord & { type: 'escrow' | 'totalSupply' } {
   return {
     configId,
-    timestamp: new UnixTime(timestamp),
+    timestamp: UnixTime(timestamp),
     amount: BigInt(amount),
     type: 'escrow',
   }

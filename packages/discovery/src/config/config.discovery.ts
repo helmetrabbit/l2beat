@@ -1,7 +1,7 @@
 import { getEnv } from '@l2beat/backend-tools'
 
 import { chains } from './chains'
-import { DiscoveryChainConfig } from './types'
+import type { DiscoveryChainConfig } from './types'
 
 export function getChainShortName(chain: string) {
   const chainConfig = chains.find((c) => c.name === chain)
@@ -51,6 +51,10 @@ export function getChainConfig(chain: string): DiscoveryChainConfig {
     beaconApiUrl: env.optionalString([
       `${ENV_NAME}_BEACON_API_URL_FOR_DISCOVERY`,
       `${ENV_NAME}_BEACON_API_URL`,
+    ]),
+    celestiaApiUrl: env.optionalString([
+      `CELESTIA_API_URL_FOR_DISCOVERY`,
+      `CELESTIA_API_URL`,
     ]),
     reorgSafeDepth: env.optionalInteger([
       `${ENV_NAME}_REORG_SAFE_DEPTH_FOR_DISCOVERY`,

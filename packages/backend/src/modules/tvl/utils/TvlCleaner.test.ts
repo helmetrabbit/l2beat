@@ -1,10 +1,10 @@
 import { Logger } from '@l2beat/backend-tools'
-import { Database } from '@l2beat/database'
+import type { Database } from '@l2beat/database'
 import { UnixTime } from '@l2beat/shared-pure'
 import { expect, mockFn, mockObject } from 'earl'
 import waitForExpect from 'wait-for-expect'
-import { Clock } from '../../../tools/Clock'
-import { SyncOptimizer } from './SyncOptimizer'
+import type { Clock } from '../../../tools/Clock'
+import type { SyncOptimizer } from './SyncOptimizer'
 import { TvlCleaner } from './TvlCleaner'
 
 describe(TvlCleaner.name, () => {
@@ -14,8 +14,8 @@ describe(TvlCleaner.name, () => {
         onNewHour: () => () => {},
       })
       const mockSyncOptimizer = mockObject<SyncOptimizer>({
-        hourlyCutOffWithGracePeriod: UnixTime.ZERO,
-        sixHourlyCutOffWithGracePeriod: UnixTime.ZERO,
+        hourlyCutOffWithGracePeriod: 0,
+        sixHourlyCutOffWithGracePeriod: 0,
       })
       const mockRepository = mockObject<Database['tvlCleaner']>()
       const tvlCleaner = new TvlCleaner(
@@ -135,8 +135,8 @@ describe(TvlCleaner.name, () => {
     })
 
     it('skips if hourly and six hourly was already cleared', async () => {
-      const hourlyDeletionBoundary = new UnixTime(1000)
-      const sixHourlyDeletionBoundary = new UnixTime(2000)
+      const hourlyDeletionBoundary = UnixTime(1000)
+      const sixHourlyDeletionBoundary = UnixTime(2000)
       const clock = mockObject<Clock>({
         onNewHour: () => () => {},
       })

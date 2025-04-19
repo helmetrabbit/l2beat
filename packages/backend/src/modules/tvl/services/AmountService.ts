@@ -1,23 +1,23 @@
-import { Logger } from '@l2beat/backend-tools'
+import type { Logger } from '@l2beat/backend-tools'
 import {
   assert,
   Bytes,
-  EscrowEntry,
-  EthereumAddress,
-  UnixTime,
+  type EscrowEntry,
+  type EthereumAddress,
+  type UnixTime,
   assertUnreachable,
 } from '@l2beat/shared-pure'
 import { partition } from 'lodash'
 
-import { AmountRecord } from '@l2beat/database'
-import { BigNumber, utils } from 'ethers'
-import { MulticallClient } from '../../../peripherals/multicall/MulticallClient'
-import {
+import type { AmountRecord } from '@l2beat/database'
+import type { RpcClient } from '@l2beat/shared'
+import { utils } from 'ethers'
+import type { MulticallClient } from '../../../peripherals/multicall/MulticallClient'
+import type {
   MulticallRequest,
   MulticallResponse,
 } from '../../../peripherals/multicall/types'
-import { RpcClient } from '../../../peripherals/rpcclient/RpcClient'
-import { ChainAmountConfig } from '../indexers/types'
+import type { ChainAmountConfig } from '../indexers/types'
 
 export const multicallInterface = new utils.Interface([
   'function getEthBalance(address account) view returns (uint256)',
@@ -59,10 +59,29 @@ export class AmountService {
       blockNumber,
     )
 
-    return [...rpcAmounts, ...multicallAmounts].map((amount) => ({
+    const result = [...rpcAmounts, ...multicallAmounts].map((amount) => ({
       ...amount,
       timestamp,
     }))
+
+    return result.map((r) => {
+      const config = configurations.find((c) => c.id === r.configId)
+      assert(config, `Config ${r.configId} not found`)
+      if (config.type === 'totalSupply' && config.premint) {
+        this.$.logger.info(`Premint detected`, {
+          amount: r.amount,
+          premint: config.premint,
+          result: r.amount - BigInt(config.premint),
+          configuration: config.id,
+        })
+
+        return {
+          ...r,
+          amount: r.amount - BigInt(config.premint),
+        }
+      }
+      return r
+    })
   }
 
   private async fetchWithRpc(
@@ -79,7 +98,7 @@ export class AmountService {
         return {
           configId: configuration.id,
           type: configuration.type,
-          amount: amount.toBigInt(),
+          amount,
         }
       }),
     )
@@ -196,12 +215,7 @@ export function encodeGetEthBalance(
 }
 
 function decodeGetEthBalance(response: Bytes) {
-  return (
-    multicallInterface.decodeFunctionResult(
-      'getEthBalance',
-      response.toString(),
-    )[0] as BigNumber
-  ).toBigInt()
+  return BigInt(response.toString())
 }
 
 export function encodeErc20BalanceQuery(
@@ -217,12 +231,7 @@ export function encodeErc20BalanceQuery(
 }
 
 function decodeErc20BalanceQuery(response: Bytes): bigint {
-  const [value] = erc20Interface.decodeFunctionResult(
-    'balanceOf',
-    response.toString(),
-  )
-
-  return (value as BigNumber).toBigInt()
+  return BigInt(response.toString())
 }
 
 export function encodeErc20TotalSupplyQuery(
@@ -235,10 +244,5 @@ export function encodeErc20TotalSupplyQuery(
 }
 
 function decodeErc20TotalSupplyQuery(response: Bytes): bigint {
-  const [value] = erc20Interface.decodeFunctionResult(
-    'totalSupply',
-    response.toString(),
-  )
-
-  return (value as BigNumber).toBigInt()
+  return BigInt(response.toString())
 }

@@ -1,20 +1,19 @@
 import { Logger } from '@l2beat/backend-tools'
 import {
-  AmountConfigBase,
+  type AmountConfigBase,
   AssetId,
   Bytes,
-  EscrowEntry,
+  type EscrowEntry,
   EthereumAddress,
   ProjectId,
-  TotalSupplyEntry,
+  type TotalSupplyEntry,
   UnixTime,
 } from '@l2beat/shared-pure'
 import { expect, mockFn, mockObject } from 'earl'
-import { BigNumber } from 'ethers'
 
-import { MulticallClient } from '../../../peripherals/multicall/MulticallClient'
-import { RpcClient } from '../../../peripherals/rpcclient/RpcClient'
-import { ChainAmountConfig } from '../indexers/types'
+import type { RpcClient } from '@l2beat/shared'
+import type { MulticallClient } from '../../../peripherals/multicall/MulticallClient'
+import type { ChainAmountConfig } from '../indexers/types'
 import {
   AmountService,
   encodeErc20BalanceQuery,
@@ -28,11 +27,11 @@ describe(AmountService.name, () => {
   const NATIVE_CODEC_SINCE_BLOCK = 1_111
 
   const blockNumber = NATIVE_CODEC_SINCE_BLOCK + 1
-  const timestamp = new UnixTime(923_234)
+  const timestamp = UnixTime(923_234)
 
   it('calls RPC if multicall does not support native balance', async () => {
     const mockRpc = mockObject<RpcClient>({
-      getBalance: () => Promise.resolve(BigNumber.from(0)),
+      getBalance: () => Promise.resolve(BigInt(0)),
     })
     const mockMulticall = mockObject<MulticallClient>({
       isNativeBalanceSupported: () => false,
@@ -225,7 +224,7 @@ function mockBaseConfig(
     dataSource: 'chain',
     project: ProjectId('project'),
     source: 'canonical' as const,
-    sinceTimestamp: new UnixTime(123),
+    sinceTimestamp: UnixTime(123),
     includeInTotal: true,
     untilTimestamp: undefined,
     decimals: 18,

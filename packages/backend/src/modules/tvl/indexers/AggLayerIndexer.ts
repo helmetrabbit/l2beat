@@ -1,16 +1,16 @@
-import { INDEXER_NAMES } from '@l2beat/config'
+import { INDEXER_NAMES } from '@l2beat/backend-shared'
 import {
   assert,
-  AggLayerL2Token,
-  AggLayerNativeEtherPreminted,
-  AggLayerNativeEtherWrapped,
-  Configuration,
-  RemovalConfiguration,
+  type AggLayerL2Token,
+  type AggLayerNativeEtherPreminted,
+  type AggLayerNativeEtherWrapped,
+  type Configuration,
+  type RemovalConfiguration,
   UnixTime,
 } from '@l2beat/shared-pure'
 import { Indexer } from '@l2beat/uif'
 import { ManagedMultiIndexer } from '../../../tools/uif/multi/ManagedMultiIndexer'
-import { AggLayerAmountConfig, AggLayerAmountIndexerDeps } from './types'
+import type { AggLayerAmountConfig, AggLayerAmountIndexerDeps } from './types'
 
 export class AggLayerIndexer extends ManagedMultiIndexer<AggLayerAmountConfig> {
   constructor(private readonly $: AggLayerAmountIndexerDeps) {
@@ -31,11 +31,11 @@ export class AggLayerIndexer extends ManagedMultiIndexer<AggLayerAmountConfig> {
     configurations: Configuration<AggLayerAmountConfig>[],
   ) {
     const timestamp = this.$.syncOptimizer.getTimestampToSync(from)
-    if (timestamp.toNumber() > to) {
+    if (timestamp > to) {
       this.logger.info('Skipping update due to sync optimization', {
         from,
         to,
-        optimizedTimestamp: timestamp.toNumber(),
+        optimizedTimestamp: timestamp,
       })
       return () => Promise.resolve(to)
     }
@@ -67,7 +67,7 @@ export class AggLayerIndexer extends ManagedMultiIndexer<AggLayerAmountConfig> {
     )
 
     this.logger.info('Fetched AggLayer amounts for timestamp', {
-      timestamp: timestamp.toNumber(),
+      timestamp: timestamp,
       blockNumber,
       tokens: tokens.length,
       nativeToken: nativeToken?.properties.type ?? undefined,
@@ -79,11 +79,11 @@ export class AggLayerIndexer extends ManagedMultiIndexer<AggLayerAmountConfig> {
     return async () => {
       await this.$.db.amount.insertMany(nonZeroAmounts)
       this.logger.info('Saved AggLayer amounts for timestamp into DB', {
-        timestamp: timestamp.toNumber(),
+        timestamp: timestamp,
         records: nonZeroAmounts.length,
       })
 
-      return timestamp.toNumber()
+      return timestamp
     }
   }
 
@@ -93,10 +93,7 @@ export class AggLayerIndexer extends ManagedMultiIndexer<AggLayerAmountConfig> {
         this.$.chain,
         timestamp,
       )
-    assert(
-      blockNumber,
-      `Block number not found for timestamp: ${timestamp.toNumber()}`,
-    )
+    assert(blockNumber, `Block number not found for timestamp: ${timestamp}`)
     return blockNumber
   }
 
@@ -104,8 +101,8 @@ export class AggLayerIndexer extends ManagedMultiIndexer<AggLayerAmountConfig> {
     for (const configuration of configurations) {
       const deletedRecords = await this.$.db.amount.deleteByConfigInTimeRange(
         configuration.id,
-        new UnixTime(configuration.from),
-        new UnixTime(configuration.to),
+        UnixTime(configuration.from),
+        UnixTime(configuration.to),
       )
 
       if (deletedRecords > 0) {

@@ -1,13 +1,17 @@
-import { MulticallConfig } from '../discovery/provider/multicall/types'
-import { ExplorerConfig } from '../utils/IEtherscanClient'
+import type { MulticallConfig } from '../discovery/provider/multicall/types'
+import type { ExplorerConfig } from '../utils/IEtherscanClient'
 
 export interface DiscoveryModuleConfig {
   readonly project: string
   readonly chain: DiscoveryChainConfig
   readonly dryRun?: boolean
   readonly dev?: boolean
+  readonly overwriteCache: boolean
   readonly printStats?: boolean
+  readonly verboseTemplatization?: boolean
   readonly saveSources?: boolean
+  readonly buildModels?: boolean
+  readonly buildProjectPageFacts?: boolean
   readonly blockNumber?: number
   readonly sourcesFolder?: string
   readonly flatSourcesFolder?: string
@@ -22,6 +26,7 @@ export interface DiscoveryChainConfig {
   eventRpcUrl?: string
   reorgSafeDepth?: number
   beaconApiUrl?: string
-  multicall: MulticallConfig
+  celestiaApiUrl?: string
+  multicall: MulticallConfig | undefined
   explorer: ExplorerConfig
 }

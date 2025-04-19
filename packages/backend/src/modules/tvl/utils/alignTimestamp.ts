@@ -5,15 +5,15 @@ export function alignTimestamp(
   hourlyCutOff: UnixTime,
   sixHourlyCutOff: UnixTime,
 ): UnixTime {
-  if (timestamp.gte(hourlyCutOff)) {
-    return timestamp.toEndOf('hour')
+  if (timestamp >= hourlyCutOff) {
+    return UnixTime.toEndOf(timestamp, 'hour')
   }
 
-  if (timestamp.gte(sixHourlyCutOff)) {
-    const result = timestamp.toEndOf('six hours')
-    return result.lte(hourlyCutOff) ? result : hourlyCutOff
+  if (timestamp >= sixHourlyCutOff) {
+    const result = UnixTime.toEndOf(timestamp, 'six hours')
+    return result <= hourlyCutOff ? result : hourlyCutOff
   }
 
-  const result = timestamp.toEndOf('day')
-  return result.lte(sixHourlyCutOff) ? result : sixHourlyCutOff
+  const result = UnixTime.toEndOf(timestamp, 'day')
+  return result <= sixHourlyCutOff ? result : sixHourlyCutOff
 }

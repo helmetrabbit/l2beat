@@ -1,6 +1,6 @@
 import clsx from 'clsx'
-import { ReactNode } from 'react'
-import { FieldValue } from '../api/types'
+import type { ReactNode } from 'react'
+import type { FieldValue } from '../api/types'
 import { AddressDisplay } from './AddressDisplay'
 
 export interface FieldValueDisplayProps {
@@ -60,10 +60,9 @@ export function FieldValueDisplay({
       </p>
     )
   } else if (value.type === 'number') {
-    const fmt = Intl.NumberFormat('en-US')
     inlineDisplay = (
       <p className="overflow-hidden break-words font-mono text-aux-orange">
-        {fmt.format(BigInt(value.value))}
+        {BigInt(value.value)}
       </p>
     )
   } else if (value.type === 'boolean') {

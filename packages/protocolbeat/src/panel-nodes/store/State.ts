@@ -1,10 +1,13 @@
-import { ApiAddressType } from '../../api/types'
+import type { ApiAddressType } from '../../api/types'
 
 export interface State {
   readonly projectId: string
   readonly nodes: readonly Node[]
   readonly selected: readonly string[]
   readonly hidden: readonly string[]
+  readonly userPreferences: {
+    readonly hideUnknownOnLoad: boolean
+  }
   readonly transform: {
     readonly offsetX: number
     readonly offsetY: number
@@ -41,8 +44,10 @@ export interface Node {
   readonly addressType: ApiAddressType
   readonly name: string
   readonly fields: Field[]
+  readonly hiddenFields: string[]
   readonly box: Box
   readonly color: number
+  readonly hueShift: number
   readonly data: unknown
 }
 

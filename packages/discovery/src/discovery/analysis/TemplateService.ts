@@ -1,39 +1,58 @@
-import { existsSync, readFileSync, readdirSync } from 'fs'
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'fs'
 import path, { join } from 'path'
-
-import { hashJson } from '@l2beat/shared'
-import { Hash256, json } from '@l2beat/shared-pure'
-import { merge } from 'lodash'
-import {
-  flattenFirstSource,
-  formatIntoHashable,
-  sha2_256bit,
-} from '../../flatten/utils'
+import { assert, EthereumAddress, Hash256 } from '@l2beat/shared-pure'
+import type { z } from 'zod'
+import { contractFlatteningHash, hashFirstSource } from '../../flatten/utils'
+import type { ContractSource } from '../../utils/IEtherscanClient'
 import { fileExistsCaseSensitive } from '../../utils/fsLayer'
-import { ContractOverrides } from '../config/DiscoveryOverrides'
-import {
-  DiscoveryContract,
-  RawDiscoveryConfig,
-} from '../config/RawDiscoveryConfig'
-import { ContractSources } from '../source/SourceCodeService'
+import { ColorContract } from '../config/ColorConfig'
+import type { ConfigRegistry } from '../config/ConfigRegistry'
+import { ContractPermission } from '../config/PermissionConfig'
+import type { ShapeSchema } from '../config/ShapeSchema'
+import { StructureContract } from '../config/StructureConfig'
+import { hashJsonStable } from '../config/hashJsonStable'
+import { makeEntryStructureConfig } from '../config/structureUtils'
+import type { DiscoveryOutput } from '../output/types'
+import type { ContractSources } from '../source/SourceCodeService'
 import { readJsonc } from '../utils/readJsonc'
 
-const TEMPLATES_PATH = path.join('discovery', '_templates')
-const TEMPLATE_SHAPE_FOLDER = 'shape'
+export const TEMPLATES_PATH = path.join('_templates')
+
+interface ShapeCriteria {
+  validAddresses?: string[]
+}
+
+export interface Shape {
+  criteria?: ShapeCriteria
+  hashes: Hash256[]
+}
 
 export class TemplateService {
-  private readonly loadedTemplates: Record<string, DiscoveryContract> = {}
-  private shapeHashes: Record<string, Hash256[]> | undefined
+  private readonly loadedTemplates: Record<string, StructureContract> = {}
+  private shapeHashes: Record<string, Shape> | undefined
+  private allTemplateHashes: Record<string, Hash256> | undefined
 
-  constructor(private readonly rootPath: string = '') {}
+  constructor(private readonly rootPath: string) {}
+
+  getTemplatePath(template: string): string {
+    return path.join(this.rootPath, TEMPLATES_PATH, template)
+  }
+
+  exists(template: string): boolean {
+    const resolvedRootPath = path.join(this.rootPath, TEMPLATES_PATH)
+    return existsSync(join(resolvedRootPath, template, 'template.jsonc'))
+  }
 
   /**
    * @returns A record where the keys are template IDs (relative paths from the templates
    *          root directory) and the values are arrays of paths to the Solidity shape
    *          files for each template.
    */
-  listAllTemplates(): Record<string, string[]> {
-    const result: Record<string, string[]> = {}
+  listAllTemplates() {
+    const result: Record<
+      string,
+      { criteria?: ShapeCriteria; shapePath: string | undefined }
+    > = {}
     const resolvedRootPath = path.join(this.rootPath, TEMPLATES_PATH)
     if (!fileExistsCaseSensitive(resolvedRootPath)) {
       return {}
@@ -43,74 +62,132 @@ export class TemplateService {
       if (!existsSync(join(path, 'template.jsonc'))) {
         continue
       }
-      const shapePath = join(path, TEMPLATE_SHAPE_FOLDER)
+      const shapePath = join(path, 'shapes.json')
 
-      const solidityShapeFiles = !existsSync(shapePath)
-        ? []
-        : readdirSync(shapePath, {
-            withFileTypes: true,
-          })
-            .filter((x) => x.isFile() && x.name.endsWith('.sol'))
-            .map((x) => join(shapePath, x.name))
+      const hasShape = existsSync(shapePath)
+      const criteriaPath = join(path, 'criteria.json')
+      const criteria = existsSync(criteriaPath)
+        ? JSON.parse(readFileSync(criteriaPath, 'utf8'))
+        : undefined
+      criteria?.validAddresses?.map((a: string) => EthereumAddress(a))
 
       const templateId = path.substring(resolvedRootPath.length + 1)
-      result[templateId] = solidityShapeFiles
+      result[templateId] = {
+        criteria,
+        shapePath: hasShape ? shapePath : undefined,
+      }
     }
     return result
   }
 
-  findMatchingTemplates(sources: ContractSources): string[] {
-    const result: string[] = []
-    if (!sources.isVerified) {
-      return result
+  findMatchingTemplates(
+    sources: ContractSources,
+    address: EthereumAddress,
+  ): string[] {
+    const sourceHash = hashFirstSource(sources.isVerified, sources.sources)
+    if (sourceHash === undefined) {
+      return []
     }
+    return this.findMatchingTemplatesByHash(sourceHash, address)
+  }
 
-    const needleSource = flattenFirstSource(sources)
-    if (needleSource === undefined) {
-      return result
-    }
+  findMatchingTemplatesByHash(
+    sourcesHash: Hash256,
+    address: EthereumAddress,
+  ): string[] {
+    const result: [string, number][] = []
 
-    const needleHash = sha2_256bit(formatIntoHashable(needleSource))
-    const allShapes = this.getAllShapeHashes()
-    for (const [templateId, haystackHashes] of Object.entries(allShapes)) {
-      if (haystackHashes.includes(needleHash)) {
-        result.push(templateId)
+    const allShapes = this.getAllShapes()
+    for (const [templateId, shape] of Object.entries(allShapes)) {
+      const criteriaMatches: string[] = []
+      if (shape.criteria && shape.criteria.validAddresses) {
+        if (!shape.criteria.validAddresses.includes(address)) {
+          continue
+        } else {
+          criteriaMatches.push('validAddress')
+        }
+      }
+      if (shape.hashes.includes(sourcesHash)) {
+        criteriaMatches.push('implementation')
+        result.push([templateId, criteriaMatches.length])
       }
     }
 
-    return result
+    const maxMatches = Math.max(...result.map(([, matches]) => matches))
+
+    // remove results that have less than maxMatches
+    // so that more specific match trumps more general ones
+    const filteredResult = result
+      .filter(([, matches]) => matches === maxMatches)
+      .map(([templateId]) => templateId)
+    filteredResult.sort()
+
+    return filteredResult
   }
 
-  loadContractTemplate(template: string): DiscoveryContract {
-    const loadedTemplate = this.loadedTemplates[template]
+  loadContractTemplateBase<T extends z.ZodTypeAny>(
+    template: string,
+    keySuffix: string,
+    parser: T,
+  ): z.infer<T> {
+    const key = `${template}.${keySuffix}`
+    const loadedTemplate = this.loadedTemplates[key]
     if (loadedTemplate !== undefined) {
-      return loadedTemplate
+      return loadedTemplate as z.infer<T>
     }
+
     const templateJsonc = readJsonc(
       path.join(this.rootPath, TEMPLATES_PATH, template, 'template.jsonc'),
     )
-    const parsed = DiscoveryContract.parse(templateJsonc)
-    this.loadedTemplates[template] = parsed
+
+    const parsed = parser.parse(templateJsonc)
+    this.loadedTemplates[key] = parsed
     return parsed
+  }
+
+  loadContractTemplate(template: string): StructureContract {
+    return this.loadContractTemplateBase(
+      template,
+      'contract',
+      StructureContract,
+    )
+  }
+
+  loadContractTemplateColor(template: string | undefined): ColorContract {
+    if (template === undefined) {
+      return ColorContract.parse({})
+    }
+
+    return this.loadContractTemplateBase(template, 'color', ColorContract)
+  }
+
+  loadContractPermissionTemplate(template: string): ContractPermission {
+    return this.loadContractTemplateBase(
+      template,
+      'permission',
+      ContractPermission,
+    )
   }
 
   getTemplateHash(template: string): Hash256 {
     const templateJson = this.loadContractTemplate(template)
-    return hashJson(templateJson as json)
+    return hashJsonStable(templateJson)
   }
 
-  getAllShapeHashes(): Record<string, Hash256[]> {
+  getAllShapes(): Record<string, Shape> {
     if (this.shapeHashes !== undefined) {
       return this.shapeHashes
     }
 
-    const result: Record<string, Hash256[]> = {}
+    const result: Record<string, Shape> = {}
     const allTemplates = this.listAllTemplates()
-    for (const [templateId, shapeFilePaths] of Object.entries(allTemplates)) {
-      const haystackHashes = shapeFilePaths.map((p) =>
-        sha2_256bit(formatIntoHashable(readFileSync(p, 'utf8'))),
+    for (const [templateId, { criteria, shapePath }] of Object.entries(
+      allTemplates,
+    )) {
+      const hashes = Object.values(this.readShapeSchema(shapePath)).map(
+        (shape) => shape.hash,
       )
-      result[templateId] = haystackHashes
+      result[templateId] = { criteria, hashes }
     }
 
     this.shapeHashes = result
@@ -118,45 +195,141 @@ export class TemplateService {
   }
 
   getAllTemplateHashes(): Record<string, Hash256> {
+    if (this.allTemplateHashes !== undefined) {
+      return this.allTemplateHashes
+    }
     const result: Record<string, Hash256> = {}
     const allTemplates = this.listAllTemplates()
     for (const templateId of Object.keys(allTemplates)) {
       result[templateId] = this.getTemplateHash(templateId)
     }
+    this.allTemplateHashes = result
     return result
   }
 
-  applyTemplateOnContractOverrides(
-    contractOverrides: ContractOverrides,
-    template: string,
-  ): ContractOverrides {
-    return {
-      name: contractOverrides.name,
-      address: contractOverrides.address,
-      ...this.applyTemplate(contractOverrides, template),
-    }
-  }
+  // returns reason or undefined
+  discoveryNeedsRefresh(discovery: DiscoveryOutput, config: ConfigRegistry) {
+    const allTemplateHashes = this.getAllTemplateHashes()
+    const allShapes = this.getAllShapes()
 
-  applyTemplate(
-    contract: DiscoveryContract,
-    template: string,
-  ): DiscoveryContract {
-    const templateJson = this.loadContractTemplate(template)
-    return DiscoveryContract.parse(merge({}, templateJson, contract))
-  }
+    for (const contract of discovery.entries) {
+      if (contract.sourceHashes === undefined) {
+        continue
+      }
+      const hashes =
+        contract.sourceHashes.length === 1
+          ? contract.sourceHashes
+          : contract.sourceHashes.slice(1)
 
-  inlineTemplates(rawConfig: RawDiscoveryConfig): void {
-    if (rawConfig.overrides === undefined) {
-      return
-    }
-    for (const [name, contract] of Object.entries(rawConfig.overrides)) {
-      if (contract.extends !== undefined) {
-        rawConfig.overrides[name] = this.applyTemplate(
-          contract,
-          contract.extends,
-        )
+      if (hashes.length > 1) {
+        // NOTE(radomski): Diamonds don't really work well with templates right now
+        continue
+      }
+
+      const hash = hashes[0]
+      assert(
+        hash !== undefined,
+        `Source hash is undefined for contract "${contract.name}" at address "${contract.address}". This indicates an issue with the discovery process or contract deployment.`,
+      )
+      const sourcesHash = Hash256(hash)
+      const matchingTemplates = this.findMatchingTemplatesByHash(
+        sourcesHash,
+        contract.address,
+      )
+
+      if (
+        contract.template !== undefined &&
+        (allShapes[contract.template]?.hashes.length ?? 0) > 0
+      ) {
+        if (
+          makeEntryStructureConfig(config.structure, contract.address)
+            .extends === undefined
+        ) {
+          if (matchingTemplates.length === 0) {
+            return `A contract "${contract.name}" with template "${contract.template}", no longer matches any template`
+          }
+          if (contract.template !== matchingTemplates[0]) {
+            return `A contract "${contract.name}" matches a different template: "${contract.template} -> ${matchingTemplates.join(', ')}"`
+          }
+        }
+      } else if (matchingTemplates.length > 0) {
+        return `A contract "${contract.name}" without template now matches: "${matchingTemplates.join(', ')}"`
       }
     }
+
+    if (discovery.configHash !== hashJsonStable(config.structure)) {
+      return 'project config or used template has changed'
+    }
+
+    const outdatedTemplates = []
+    for (const [templateId, templateHash] of Object.entries(
+      discovery.usedTemplates,
+    )) {
+      if (templateHash !== allTemplateHashes[templateId]) {
+        outdatedTemplates.push(templateId)
+      }
+    }
+
+    if (outdatedTemplates.length > 0) {
+      return `template configs has changed: ${outdatedTemplates.join(', ')}`
+    }
+  }
+
+  addToShape(
+    templateId: string,
+    chain: string,
+    address: EthereumAddress,
+    fileName: string,
+    blockNumber: number,
+    source: ContractSource,
+  ): void {
+    assert(this.exists(templateId), 'Template does not exist')
+    const allTemplates = this.listAllTemplates()
+    const entry = allTemplates[templateId]
+    assert(entry !== undefined, 'Could not find template')
+
+    const shapes =
+      entry.shapePath === undefined ? {} : this.readShapeSchema(entry.shapePath)
+    const hash = contractFlatteningHash(source)
+    assert(hash !== undefined, 'Could not find hash')
+
+    if (Object.values(shapes).some((s) => s.hash === hash)) {
+      return
+    }
+
+    shapes[fileName] = {
+      hash: Hash256(hash),
+      address,
+      chain,
+      blockNumber,
+    }
+
+    const resolvedRootPath = path.join(this.rootPath, TEMPLATES_PATH)
+    const templatePath = join(resolvedRootPath, templateId)
+    const shapePath = join(templatePath, 'shapes.json')
+    writeFileSync(shapePath, JSON.stringify(shapes, null, 2))
+  }
+
+  readShapeSchema(shapePath: string | undefined): ShapeSchema {
+    if (shapePath === undefined) {
+      return {}
+    }
+
+    return JSON.parse(readFileSync(shapePath, 'utf8')) as ShapeSchema
+  }
+
+  findShapeByTemplateAndHash(
+    templateId: string,
+    hash: Hash256,
+  ): [string, ShapeSchema[string]] | undefined {
+    const allTemplates = this.listAllTemplates()
+    const entry = allTemplates[templateId]
+    if (!entry || !entry.shapePath) {
+      return undefined
+    }
+
+    const shapes = this.readShapeSchema(entry.shapePath)
+    return Object.entries(shapes).find(([_, s]) => s.hash === hash)
   }
 }
 

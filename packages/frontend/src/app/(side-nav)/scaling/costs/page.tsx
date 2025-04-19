@@ -1,17 +1,14 @@
 import { HOMEPAGE_MILESTONES } from '@l2beat/config'
-import { ScalingCostsChart } from '~/components/chart/costs/scaling-costs-chart'
-import { MainPageCard } from '~/components/main-page-card'
-import { MainPageHeader } from '~/components/main-page-header'
+import { TableFilterContextProvider } from '~/components/table/filters/table-filter-context'
 import { getScalingCostsEntries } from '~/server/features/scaling/costs/get-scaling-costs-entries'
 import { HydrateClient, api } from '~/trpc/server'
 import { getDefaultMetadata } from '~/utils/metadata'
-import { ScalingFilterContextProvider } from '../_components/scaling-filter-context'
+import { CostsHeader } from './_components/costs-header'
 import { CostsMetricContextProvider } from './_components/costs-metric-context'
 import { CostsTimeRangeContextProvider } from './_components/costs-time-range-context'
 import { CostsUnitContextProvider } from './_components/costs-unit-context'
-import { ScalingCostsTables } from './_components/scaling-costs-tables'
+import { ScalingCostsTabs } from './_components/scaling-costs-tabs'
 
-export const revalidate = 600
 export const metadata = getDefaultMetadata({
   openGraph: {
     url: '/scaling/costs',
@@ -19,34 +16,28 @@ export const metadata = getDefaultMetadata({
 })
 
 export default async function Page() {
-  const [entries, _, __] = await Promise.all([
+  const [entries] = await Promise.all([
     getScalingCostsEntries(),
-    api.costs.chart.prefetch({ range: '30d', filter: { type: 'all' } }),
+    api.costs.chart.prefetch({
+      range: '30d',
+      filter: { type: 'rollups' },
+      previewRecategorisation: false,
+    }),
     api.costs.table.prefetch({ range: '30d' }),
   ])
 
   return (
     <HydrateClient>
-      <ScalingFilterContextProvider>
+      <TableFilterContextProvider>
         <CostsTimeRangeContextProvider>
           <CostsUnitContextProvider>
             <CostsMetricContextProvider>
-              <MainPageHeader>Onchain costs</MainPageHeader>
-              <MainPageCard>
-                <ScalingCostsChart
-                  entries={[
-                    ...entries.rollups,
-                    ...entries.validiumsAndOptimiums,
-                    ...(entries.others ?? []),
-                  ]}
-                  milestones={HOMEPAGE_MILESTONES}
-                />
-              </MainPageCard>
-              <ScalingCostsTables {...entries} />
+              <CostsHeader />
+              <ScalingCostsTabs {...entries} milestones={HOMEPAGE_MILESTONES} />
             </CostsMetricContextProvider>
           </CostsUnitContextProvider>
         </CostsTimeRangeContextProvider>
-      </ScalingFilterContextProvider>
+      </TableFilterContextProvider>
     </HydrateClient>
   )
 }

@@ -1,15 +1,13 @@
-import { ConfigMapping } from '@l2beat/config'
-import { assert, PremintedEntry, ProjectId } from '@l2beat/shared-pure'
-import { TvlConfig } from '../../../config/Config'
-import { Peripherals } from '../../../peripherals/Peripherals'
+import type { ConfigMapping } from '@l2beat/backend-shared'
+import { assert, type PremintedEntry, ProjectId } from '@l2beat/shared-pure'
+import type { TvlConfig } from '../../../config/Config'
 import { MulticallClient } from '../../../peripherals/multicall/MulticallClient'
-import { RpcClient } from '../../../peripherals/rpcclient/RpcClient'
-import { BlockTimestampIndexer } from '../indexers/BlockTimestampIndexer'
-import { DescendantIndexer } from '../indexers/DescendantIndexer'
+import type { BlockTimestampIndexer } from '../indexers/BlockTimestampIndexer'
+import type { DescendantIndexer } from '../indexers/DescendantIndexer'
 import { PremintedIndexer } from '../indexers/PremintedIndexer'
 import { ValueIndexer } from '../indexers/ValueIndexer'
 import { AmountService } from '../services/AmountService'
-import { TvlDependencies } from './TvlDependencies'
+import type { TvlDependencies } from './TvlDependencies'
 
 interface PremintedModule {
   start: () => Promise<void> | void
@@ -17,7 +15,6 @@ interface PremintedModule {
 
 export function initPremintedModule(
   config: TvlConfig,
-  peripherals: Peripherals,
   dependencies: TvlDependencies,
   configMapping: ConfigMapping,
   descendantPriceIndexer: DescendantIndexer,
@@ -25,7 +22,6 @@ export function initPremintedModule(
 ): PremintedModule | undefined {
   const { dataIndexers, valueIndexers } = createIndexers(
     config,
-    peripherals,
     dependencies,
     configMapping,
     descendantPriceIndexer,
@@ -49,52 +45,39 @@ export function initPremintedModule(
 
 function createIndexers(
   config: TvlConfig,
-  peripherals: Peripherals,
   dependencies: TvlDependencies,
   configMapping: ConfigMapping,
   descendantPriceIndexer: DescendantIndexer,
   blockTimestampIndexers?: Map<string, BlockTimestampIndexer>,
 ) {
   const logger = dependencies.logger.tag({ module: 'preminted' })
-  const indexerService = dependencies.getIndexerService()
-  const syncOptimizer = dependencies.getSyncOptimizer()
-  const circulatingSupplyService = dependencies.getCirculatingSupplyService()
-  const valueService = dependencies.getValueService()
+  const indexerService = dependencies.indexerService
+  const syncOptimizer = dependencies.syncOptimizer
+  const circulatingSupplyService = dependencies.circulatingSupplyService
+  const valueService = dependencies.valueService
 
   const dataIndexers: PremintedIndexer[] = []
   const valueIndexers: ValueIndexer[] = []
 
-  for (const chainConfig of config.chains) {
-    const chain = chainConfig.chain
-    if (!chainConfig.config) {
-      continue
-    }
-
+  for (const chain of config.chains) {
     const premintedTokens = config.amounts
-      .filter((a) => a.chain === chain)
+      .filter((a) => a.chain === chain.name)
       .filter((a): a is PremintedEntry => a.type === 'preminted')
 
     if (premintedTokens.length === 0) {
       continue
     }
 
-    const rpcClient = peripherals.getClient(RpcClient, {
-      url: chainConfig.config.providerUrl,
-      callsPerMinute: chainConfig.config.providerCallsPerMinute,
-      chain: chainConfig.chain,
-    })
+    const rpcClient = dependencies.clients.getRpcClient(chain.name)
 
     const amountService = new AmountService({
       rpcClient: rpcClient,
-      multicallClient: new MulticallClient(
-        rpcClient,
-        chainConfig.config.multicallConfig,
-      ),
-      logger: logger.tag({ tag: chain, chain }),
+      multicallClient: new MulticallClient(rpcClient, chain.multicallConfig),
+      logger: logger.tag({ tag: chain.name, chain: chain.name }),
     })
 
     const blockTimestampIndexer =
-      blockTimestampIndexers && blockTimestampIndexers.get(chain)
+      blockTimestampIndexers && blockTimestampIndexers.get(chain.name)
     assert(
       blockTimestampIndexer,
       'blockTimestampIndexer should be defined for enabled chain',
@@ -106,28 +89,28 @@ function createIndexers(
         parents: [blockTimestampIndexer],
         indexerService,
         configuration: preminted,
-        minHeight: preminted.sinceTimestamp.toNumber(),
+        minHeight: preminted.sinceTimestamp,
         amountService,
         circulatingSupplyService,
         syncOptimizer,
-        db: peripherals.database,
+        db: dependencies.database,
       })
 
       dataIndexers.push(indexer)
 
       const valueIndexer = new ValueIndexer({
         valueService,
-        db: peripherals.database,
+        db: dependencies.database,
         priceConfigs: [configMapping.getPriceConfigFromAmountConfig(preminted)],
         amountConfigs: [preminted],
         project: ProjectId(preminted.project),
-        dataSource: `${chain}_preminted_${preminted.address}`,
+        dataSource: `${chain.name}_preminted_${preminted.address}`,
         syncOptimizer,
         parents: [descendantPriceIndexer, indexer],
         indexerService,
         logger,
-        minHeight: preminted.sinceTimestamp.toNumber(),
-        maxHeight: preminted.untilTimestamp?.toNumber(),
+        minHeight: preminted.sinceTimestamp,
+        maxHeight: preminted.untilTimestamp,
         maxTimestampsToProcessAtOnce: config.maxTimestampsToAggregateAtOnce,
       })
 

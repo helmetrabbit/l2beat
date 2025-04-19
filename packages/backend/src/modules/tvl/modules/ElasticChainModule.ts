@@ -1,22 +1,20 @@
-import { ConfigMapping, createAmountId } from '@l2beat/config'
+import { type ConfigMapping, createAmountId } from '@l2beat/backend-shared'
 import {
   assert,
-  ElasticChainEther,
-  ElasticChainL2Token,
+  type ElasticChainEther,
+  type ElasticChainL2Token,
   ProjectId,
 } from '@l2beat/shared-pure'
 import { groupBy } from 'lodash'
-import { ChainTvlConfig, TvlConfig } from '../../../config/Config'
-import { Peripherals } from '../../../peripherals/Peripherals'
+import type { ChainTvlConfig, TvlConfig } from '../../../config/Config'
 import { MulticallClient } from '../../../peripherals/multicall/MulticallClient'
-import { RpcClient } from '../../../peripherals/rpcclient/RpcClient'
-import { BlockTimestampIndexer } from '../indexers/BlockTimestampIndexer'
-import { DescendantIndexer } from '../indexers/DescendantIndexer'
+import type { BlockTimestampIndexer } from '../indexers/BlockTimestampIndexer'
+import type { DescendantIndexer } from '../indexers/DescendantIndexer'
 import { ElasticChainIndexer } from '../indexers/ElasticChainIndexer'
 import { ValueIndexer } from '../indexers/ValueIndexer'
-import { ElasticChainAmountConfig } from '../indexers/types'
+import type { ElasticChainAmountConfig } from '../indexers/types'
 import { ElasticChainService } from '../services/ElasticChainService'
-import { TvlDependencies } from './TvlDependencies'
+import type { TvlDependencies } from './TvlDependencies'
 
 interface ElasticChainModule {
   start: () => Promise<void> | void
@@ -24,7 +22,6 @@ interface ElasticChainModule {
 
 export function initElasticChainModule(
   config: TvlConfig,
-  peripherals: Peripherals,
   dependencies: TvlDependencies,
   configMapping: ConfigMapping,
   descendantPriceIndexer: DescendantIndexer,
@@ -32,7 +29,6 @@ export function initElasticChainModule(
 ): ElasticChainModule | undefined {
   const { dataIndexers, valueIndexers } = createIndexers(
     config,
-    peripherals,
     dependencies,
     configMapping,
     descendantPriceIndexer,
@@ -55,29 +51,23 @@ export function initElasticChainModule(
 
 function createIndexers(
   config: TvlConfig,
-  peripherals: Peripherals,
   dependencies: TvlDependencies,
   configMapping: ConfigMapping,
   descendantPriceIndexer: DescendantIndexer,
   blockTimestampIndexers?: Map<string, BlockTimestampIndexer>,
 ) {
   const logger = dependencies.logger.tag({ module: 'elasticChain' })
-  const indexerService = dependencies.getIndexerService()
-  const syncOptimizer = dependencies.getSyncOptimizer()
-  const valueService = dependencies.getValueService()
+  const indexerService = dependencies.indexerService
+  const syncOptimizer = dependencies.syncOptimizer
+  const valueService = dependencies.valueService
 
   const dataIndexers: ElasticChainIndexer[] = []
   const valueIndexers: ValueIndexer[] = []
 
-  for (const chainConfig of config.chains) {
-    const chain = chainConfig.chain
-    if (!chainConfig.config) {
-      continue
-    }
-
+  for (const chain of config.chains) {
     const elasticChainAmountEntries = config.amounts.filter(
       (a): a is ElasticChainAmountConfig =>
-        a.chain === chain &&
+        a.chain === chain.name &&
         (a.type === 'elasticChainL2Token' || a.type === 'elasticChainEther'),
     )
 
@@ -85,48 +75,43 @@ function createIndexers(
       continue
     }
 
-    const rpcClient = peripherals.getClient(RpcClient, {
-      url: chainConfig.config.providerUrl,
-      callsPerMinute: chainConfig.config.providerCallsPerMinute,
-      chain: chainConfig.chain,
-    })
+    const rpcClient = dependencies.clients.getRpcClient(chain.name)
 
-    const bridgeAddress = elasticChainAmountEntries.find(
-      (e) => e.type === 'elasticChainL2Token',
-    )?.l2BridgeAddress
-    assert(bridgeAddress, 'Bridge address not found')
+    const sharedEscrow = config.projects
+      .find((p) => p.id === chain.name)
+      ?.tvlConfig.escrows.find(
+        (e) => e.sharedEscrow && e.sharedEscrow.type === 'ElasticChain',
+      )
+    assert(
+      sharedEscrow && sharedEscrow.sharedEscrow?.type === 'ElasticChain',
+      `${chain}: Shared escrow not found`,
+    )
 
     const elasticChainService = new ElasticChainService({
       rpcClient: rpcClient,
-      multicallClient: new MulticallClient(
-        rpcClient,
-        chainConfig.config.multicallConfig,
-      ),
-      bridgeAddress,
+      multicallClient: new MulticallClient(rpcClient, chain.multicallConfig),
+      bridgeAddress: sharedEscrow.sharedEscrow.l2BridgeAddress,
     })
 
     const blockTimestampIndexer =
-      blockTimestampIndexers && blockTimestampIndexers.get(chain)
+      blockTimestampIndexers && blockTimestampIndexers.get(chain.name)
     assert(
       blockTimestampIndexer,
       'blockTimestampIndexer should be defined for enabled chain',
     )
 
-    const configurations = toConfigurations(
-      chainConfig,
-      elasticChainAmountEntries,
-    )
+    const configurations = toConfigurations(chain, elasticChainAmountEntries)
 
     const elasticChainIndexer = new ElasticChainIndexer({
       logger,
       parents: [blockTimestampIndexer],
       indexerService,
       configurations,
-      chain,
+      chain: chain.name,
       elasticChainService,
       serializeConfiguration,
       syncOptimizer,
-      db: peripherals.database,
+      db: dependencies.database,
     })
 
     dataIndexers.push(elasticChainIndexer)
@@ -140,20 +125,18 @@ function createIndexers(
         ),
       )
 
-      const minHeight = Math.min(
-        ...amountConfigs.map((c) => c.sinceTimestamp.toNumber()),
-      )
+      const minHeight = Math.min(...amountConfigs.map((c) => c.sinceTimestamp))
       const maxHeight = Math.max(
-        ...amountConfigs.map((c) => c.untilTimestamp?.toNumber() ?? Infinity),
+        ...amountConfigs.map((c) => c.untilTimestamp ?? Infinity),
       )
 
       const indexer = new ValueIndexer({
         valueService,
-        db: peripherals.database,
+        db: dependencies.database,
         priceConfigs: [...priceConfigs],
         amountConfigs,
         project: ProjectId(project),
-        dataSource: `${chain}_elastic_chain`,
+        dataSource: `${chain.name}_elastic_chain`,
         syncOptimizer,
         parents: [descendantPriceIndexer, elasticChainIndexer],
         indexerService,
@@ -170,19 +153,18 @@ function createIndexers(
 }
 
 function toConfigurations(
-  chainConfig: ChainTvlConfig,
+  chain: ChainTvlConfig,
   elasticChainAmountEntries: ElasticChainAmountConfig[],
 ) {
-  assert(chainConfig.config)
-  const chainMinTimestamp = chainConfig.config.minBlockTimestamp
   const elasticChainAmountConfigurations = elasticChainAmountEntries.map(
     (a) => ({
       id: createAmountId(a),
       properties: a,
-      minHeight: a.sinceTimestamp.lt(chainMinTimestamp)
-        ? chainMinTimestamp.toNumber()
-        : a.sinceTimestamp.toNumber(),
-      maxHeight: a.untilTimestamp?.toNumber() ?? null,
+      minHeight:
+        a.sinceTimestamp < chain.minBlockTimestamp
+          ? chain.minBlockTimestamp
+          : a.sinceTimestamp,
+      maxHeight: a.untilTimestamp ?? null,
     }),
   )
   return elasticChainAmountConfigurations
@@ -223,9 +205,9 @@ function getBaseEntry(value: ElasticChainL2Token | ElasticChainEther) {
     chain: value.chain,
     project: value.project.toString(),
     source: value.source,
-    sinceTimestamp: value.sinceTimestamp.toNumber(),
+    sinceTimestamp: value.sinceTimestamp,
     ...(Object.keys(value).includes('untilTimestamp')
-      ? { untilTimestamp: value.untilTimestamp?.toNumber() }
+      ? { untilTimestamp: value.untilTimestamp }
       : {}),
     includeInTotal: value.includeInTotal,
     decimals: value.decimals,

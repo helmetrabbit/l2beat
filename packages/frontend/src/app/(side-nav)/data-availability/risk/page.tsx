@@ -12,10 +12,8 @@ import {
   CustomSystemInfo,
   PublicSystemInfo,
 } from '../_components/da-category-info'
-import { groupBySystem } from '../_utils/group-by-system'
 import { DaRiskTable } from './_components/table/da-risk-table'
 
-export const revalidate = 600
 export const metadata = getDefaultMetadata({
   openGraph: {
     url: '/data-availability/risk',
@@ -23,13 +21,17 @@ export const metadata = getDefaultMetadata({
 })
 
 export default async function Page() {
-  const items = await getDaRiskEntries()
-  const { publicSystems, customSystems } = groupBySystem(items)
+  const { publicSystems, customSystems } = await getDaRiskEntries()
 
   return (
     <div>
       <MainPageHeader>Risk Analysis</MainPageHeader>
-      <div className="flex flex-col gap-6">
+      {/* 
+        Negative margin is there to make the tabs align with the side nav
+        Padding from directory tabs can not be removed because it is needed
+        for the tabs to be sticky
+      */}
+      <div className="flex flex-col gap-6 lg:-mt-4">
         <DirectoryTabs defaultValue="public">
           <DirectoryTabsList>
             <DirectoryTabsTrigger value="public">

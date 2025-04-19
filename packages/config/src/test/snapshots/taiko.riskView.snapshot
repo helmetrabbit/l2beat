@@ -2,15 +2,10 @@
 
 {
   dataAvailability: {
-    definingMetric: Infinity
     description: "All of the data needed for proof construction is published on Ethereum L1."
+    orderHint: Infinity
     sentiment: "good"
     value: "Onchain"
-  }
-  destinationToken: {
-    description: "ETH transferred via this bridge is used to pay for gas and other tokens transferred are considered canonical on the destination chain."
-    sentiment: "good"
-    value: "Native & Canonical"
   }
   exitWindow: {
     description: "There is no window for users to exit in case of an unwanted upgrade since contracts are instantly upgradable."
@@ -23,7 +18,7 @@
     value: "Self propose"
   }
   sequencerFailure: {
-    description: "The system uses a based (or L1-sequenced) rollup sequencing mechanism. Users can propose L2 blocks directly on the Taiko L1 contract. The TaikoAdmin multisig can pause block proposals without delay."
+    description: "The system uses a based (or L1-sequenced) rollup sequencing mechanism. Users can propose L2 blocks directly on the Taiko L1 contract. The Taiko multisig can pause block proposals without delay."
     sentiment: "good"
     value: "Self sequence"
   }
@@ -32,10 +27,5 @@
     secondLine: "4h challenge period"
     sentiment: "bad"
     value: "Multi-proofs"
-  }
-  validatedBy: {
-    description: "Smart contracts on Ethereum validate all bridge transfers."
-    sentiment: "good"
-    value: "Ethereum"
   }
 }

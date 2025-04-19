@@ -1,5 +1,6 @@
-import {
+import type {
   ApiCodeResponse,
+  ApiCodeSearchResponse,
   ApiPreviewResponse,
   ApiProjectResponse,
   ApiProjectsResponse,
@@ -28,7 +29,7 @@ export async function getCode(
   address: string | undefined,
 ): Promise<ApiCodeResponse> {
   if (!address) {
-    return { sources: [] }
+    return { entryName: undefined, sources: [] }
   }
   const res = await fetch(`/api/projects/${project}/code/${address}`)
   if (!res.ok) {
@@ -36,6 +37,18 @@ export async function getCode(
   }
   const data = await res.json()
   return data as ApiCodeResponse
+}
+
+export async function searchCode(
+  project: string,
+  searchTerm: string,
+): Promise<ApiCodeSearchResponse> {
+  const res = await fetch(`/api/projects/${project}/codeSearch/${searchTerm}`)
+  if (!res.ok) {
+    throw new Error(res.statusText)
+  }
+  const data = await res.json()
+  return data as ApiCodeSearchResponse
 }
 
 export async function getPreview(project: string): Promise<ApiPreviewResponse> {
@@ -47,11 +60,28 @@ export async function getPreview(project: string): Promise<ApiPreviewResponse> {
   return data as ApiPreviewResponse
 }
 
-export function executeCommand(
-  command: string,
+export function executeDiscover(
   project: string,
   chain: string,
+  devMode: boolean,
 ): EventSource {
-  const params = new URLSearchParams({ command, project, chain })
-  return new EventSource(`/api/terminal/execute?${params}`)
+  const params = new URLSearchParams({
+    project,
+    chain,
+    devMode: devMode.toString(),
+  })
+  return new EventSource(`/api/terminal/discover?${params}`)
+}
+
+export function executeMatchFlat(
+  project: string,
+  address: string,
+  against: 'templates' | 'projects',
+): EventSource {
+  const params = new URLSearchParams({
+    project,
+    address,
+    against,
+  })
+  return new EventSource(`/api/terminal/match-flat?${params}`)
 }

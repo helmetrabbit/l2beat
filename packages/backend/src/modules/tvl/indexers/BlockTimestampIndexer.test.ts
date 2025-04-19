@@ -2,12 +2,12 @@ import { Logger } from '@l2beat/backend-tools'
 import { UnixTime } from '@l2beat/shared-pure'
 import { expect, mockFn, mockObject } from 'earl'
 
-import { Database } from '@l2beat/database'
+import type { Database } from '@l2beat/database'
 import { mockDatabase } from '../../../test/database'
-import { IndexerService } from '../../../tools/uif/IndexerService'
+import type { IndexerService } from '../../../tools/uif/IndexerService'
 import { _TEST_ONLY_resetUniqueIds } from '../../../tools/uif/ids'
-import { BlockTimestampProvider } from '../services/BlockTimestampProvider'
-import { SyncOptimizer } from '../utils/SyncOptimizer'
+import type { BlockTimestampProvider } from '../services/BlockTimestampProvider'
+import type { SyncOptimizer } from '../utils/SyncOptimizer'
 import { BlockTimestampIndexer } from './BlockTimestampIndexer'
 
 describe(BlockTimestampIndexer.name, () => {
@@ -19,7 +19,7 @@ describe(BlockTimestampIndexer.name, () => {
     it('finds timestamp to sync and gets closest block', async () => {
       const from = 100
       const to = 300
-      const timestampToSync = new UnixTime(200)
+      const timestampToSync = UnixTime(200)
       const syncOptimizer = mockObject<SyncOptimizer>({
         getTimestampToSync: mockFn().returnsOnce(timestampToSync),
       })
@@ -57,13 +57,13 @@ describe(BlockTimestampIndexer.name, () => {
         blockNumber: 666,
       })
 
-      expect(newSafeHeight).toEqual(timestampToSync.toNumber())
+      expect(newSafeHeight).toEqual(timestampToSync)
     })
 
     it('throws when fetched block number is smaller than previously fetched', async () => {
       const from = 100
       const to = 300
-      const timestampToSync = new UnixTime(200)
+      const timestampToSync = UnixTime(200)
       const syncOptimizer = mockObject<SyncOptimizer>({
         getTimestampToSync: mockFn().returns(timestampToSync),
       })
@@ -99,7 +99,7 @@ describe(BlockTimestampIndexer.name, () => {
     it('returns if optimized timestamp is later than to', async () => {
       const from = 100
       const to = 300
-      const timestampToSync = new UnixTime(to + 100)
+      const timestampToSync = UnixTime(to + 100)
       const syncOptimizer = mockObject<SyncOptimizer>({
         getTimestampToSync: mockFn().returnsOnce(timestampToSync),
       })
@@ -145,7 +145,7 @@ describe(BlockTimestampIndexer.name, () => {
 
       expect(
         blockTimestampRepository.deleteAfterExclusive,
-      ).toHaveBeenCalledWith('ethereum', new UnixTime(targetHeight))
+      ).toHaveBeenCalledWith('ethereum', UnixTime(targetHeight))
       expect(newSafeHeight).toEqual(targetHeight)
     })
   })

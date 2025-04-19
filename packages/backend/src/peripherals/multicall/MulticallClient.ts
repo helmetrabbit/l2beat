@@ -1,7 +1,7 @@
-import { EthereumAddress } from '@l2beat/shared-pure'
-import { RpcClient } from '../rpcclient/RpcClient'
+import type { RpcClient } from '@l2beat/shared'
+import type { EthereumAddress } from '@l2beat/shared-pure'
 import { parseEthersError } from './parseEthersError'
-import {
+import type {
   MulticallConfigEntry,
   MulticallRequest,
   MulticallResponse,

@@ -1,17 +1,13 @@
 'use client'
 
 import { createContext, useContext, useState } from 'react'
-import { type RosetteValue } from './types'
-
-interface ContentState {
-  risk: RosetteValue
-  side: 'top' | 'bottom'
-  sideOffset: number
-}
+import type { RosetteValue } from './types'
 
 type RosetteTooltipContextValue = {
-  content: ContentState | undefined
-  setContent: React.Dispatch<React.SetStateAction<ContentState | undefined>>
+  selectedRisk: RosetteValue | undefined
+  setSelectedRisk: React.Dispatch<
+    React.SetStateAction<RosetteValue | undefined>
+  >
 }
 
 const RosetteTooltipContext = createContext<RosetteTooltipContextValue | null>(
@@ -23,13 +19,12 @@ interface Props {
 }
 
 export function RosetteTooltipContextProvider({ children }: Props) {
-  const [content, setContent] = useState<ContentState | undefined>()
-
+  const [selectedRisk, setSelectedRisk] = useState<RosetteValue | undefined>()
   return (
     <RosetteTooltipContext.Provider
       value={{
-        content,
-        setContent,
+        selectedRisk,
+        setSelectedRisk,
       }}
     >
       {children}

@@ -1,7 +1,8 @@
-import { ContractValue, ProxyDetails } from '@l2beat/discovery-types'
 import { Bytes, EthereumAddress } from '@l2beat/shared-pure'
-import { IProvider } from '../../provider/IProvider'
+import type { ContractValue } from '../../output/types'
+import type { IProvider } from '../../provider/IProvider'
 import { getPastUpgradesSingleEvent } from '../pastUpgrades'
+import type { ProxyDetails } from '../types'
 
 // keccak256('org.zeppelinos.proxy.implementation')
 const IMPLEMENTATION_SLOT = Bytes.fromHex(
@@ -35,11 +36,24 @@ export async function detectZeppelinOSProxy(
   ])
 
   const admins = [owner, admin].filter((a) => a !== EthereumAddress.ZERO)
-  const pastUpgrades = await getPastUpgradesSingleEvent(
-    provider,
-    address,
-    'event Upgraded(address indexed implementation)',
-  )
+  const pastUpgrades = []
+  try {
+    pastUpgrades.push(
+      ...(await getPastUpgradesSingleEvent(
+        provider,
+        address,
+        'event Upgraded(address indexed implementation)',
+      )),
+    )
+  } catch {
+    pastUpgrades.push(
+      ...(await getPastUpgradesSingleEvent(
+        provider,
+        address,
+        'event Upgraded(address implementation)',
+      )),
+    )
+  }
 
   return {
     type: 'ZeppelinOS proxy',

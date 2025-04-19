@@ -1,19 +1,27 @@
-import { join } from 'path'
-import { ConfigReader } from '@l2beat/discovery'
+import type { Server } from 'http'
+import path, { join } from 'path'
+import {
+  ConfigReader,
+  TemplateService,
+  getDiscoveryPaths,
+} from '@l2beat/discovery'
 import express from 'express'
 import { executeTerminalCommand } from './executeTerminalCommand'
-import { getCode } from './getCode'
+import { getCode, getCodePaths } from './getCode'
 import { getPreview } from './getPreview'
 import { getProject } from './getProject'
 import { getProjects } from './getProjects'
+import { searchCode } from './searchCode'
 
-export function runDiscoveryUi() {
+export function runDiscoveryUi({ readonly }: { readonly: boolean }) {
   const app = express()
-  const port = 2021
+  const port = process.env.PORT ?? 2021
 
   const STATIC_ROOT = join(__dirname, '../../../../protocolbeat/build')
-  const DISCOVERY_ROOT = join(__dirname, '../../../../backend')
-  const configReader = new ConfigReader(DISCOVERY_ROOT)
+
+  const paths = getDiscoveryPaths()
+  const configReader = new ConfigReader(paths.discovery)
+  const templateService = new TemplateService(paths.discovery)
 
   app.use(express.json())
 
@@ -23,7 +31,11 @@ export function runDiscoveryUi() {
   })
 
   app.get('/api/projects/:project', (req, res) => {
-    const response = getProject(configReader, req.params.project)
+    const response = getProject(
+      configReader,
+      templateService,
+      req.params.project,
+    )
     res.json(response)
   })
 
@@ -34,9 +46,20 @@ export function runDiscoveryUi() {
 
   app.get('/api/projects/:project/code/:address', (req, res) => {
     const response = getCode(
+      paths,
       configReader,
       req.params.project,
       req.params.address,
+    )
+    res.json(response)
+  })
+
+  app.get('/api/projects/:project/codeSearch/:searchTerm', (req, res) => {
+    const response = searchCode(
+      paths,
+      configReader,
+      req.params.project,
+      req.params.searchTerm,
     )
     res.json(response)
   })
@@ -49,32 +72,131 @@ export function runDiscoveryUi() {
     res.sendFile(join(STATIC_ROOT, 'index.html'))
   })
 
-  // Start executing one of predefined commands
-  // and stream the output back to the client
-  app.get('/api/terminal/execute', (req, res) => {
-    const { command, project, chain } = req.query
-    if (!command || !project || !chain) {
+  app.get('/api/terminal/discover', (req, res) => {
+    const { project, chain, devMode } = req.query
+    if (!project || !chain || !devMode) {
       res.status(400).send('Missing required parameters')
       return
     }
-    if (command !== 'discover') {
-      res.status(400).send('Invalid command')
+    executeTerminalCommand(
+      `(cd ${path.dirname(paths.discovery)} && l2b discover ${chain} ${project} ${devMode === 'true' ? '--dev' : ''})`,
+      res,
+    )
+  })
+
+  app.get('/api/terminal/match-flat', (req, res) => {
+    const { project, address, against } = req.query
+    if (!project || !address || !against) {
+      res.status(400).send('Missing required parameters')
       return
     }
-
-    res.setHeader('Content-Type', 'text/event-stream')
-    res.setHeader('Cache-Control', 'no-cache')
-    res.setHeader('Connection', 'keep-alive')
+    const { codePaths } = getCodePaths(
+      paths,
+      configReader,
+      project.toString(),
+      address.toString(),
+    )
+    const implementationPath =
+      codePaths.length > 1 ? codePaths[1].path : codePaths[0].path
+    const againstPath =
+      against === 'templates' ? './discovery/_templates/' : './discovery/'
 
     executeTerminalCommand(
-      `(cd ../backend && pnpm discover ${chain} ${project})`,
+      `(cd ${path.dirname(paths.discovery)} && l2b match-flat file "${implementationPath}" "${againstPath}")`,
       res,
     )
   })
 
   app.use(express.static(STATIC_ROOT))
 
-  app.listen(port, () => {
+  if (!readonly) {
+    app.get('/api/projects/:project/code/:address', (req, res) => {
+      const response = getCode(
+        paths,
+        configReader,
+        req.params.project,
+        req.params.address,
+      )
+      res.json(response)
+    })
+
+    app.get('/api/projects/:project/code/:address', (req, res) => {
+      const response = getCode(
+        paths,
+        configReader,
+        req.params.project,
+        req.params.address,
+      )
+      res.json(response)
+    })
+
+    app.get('/api/projects/:project/codeSearch/:searchTerm', (req, res) => {
+      const response = searchCode(
+        paths,
+        configReader,
+        req.params.project,
+        req.params.searchTerm,
+      )
+      res.json(response)
+    })
+
+    app.get('/api/terminal/discover', (req, res) => {
+      const { project, chain, devMode } = req.query
+      if (!project || !chain || !devMode) {
+        res.status(400).send('Missing required parameters')
+        return
+      }
+      executeTerminalCommand(
+        `(cd ${path.dirname(paths.discovery)} && l2b discover ${chain} ${project} ${devMode === 'true' ? '--dev' : ''})`,
+        res,
+      )
+    })
+
+    app.get('/api/terminal/match-flat', (req, res) => {
+      const { project, address, against } = req.query
+      if (!project || !address || !against) {
+        res.status(400).send('Missing required parameters')
+        return
+      }
+      const { codePaths } = getCodePaths(
+        paths,
+        configReader,
+        project.toString(),
+        address.toString(),
+      )
+      const implementationPath =
+        codePaths.length > 1 ? codePaths[1].path : codePaths[0].path
+      const againstPath =
+        against === 'templates' ? './discovery/_templates/' : './discovery/'
+
+      executeTerminalCommand(
+        `(cd ${path.dirname(paths.discovery)} && l2b match-flat file "${implementationPath}" "${againstPath}")`,
+        res,
+      )
+    })
+  }
+
+  const server = app.listen(port, () => {
     console.log(`Discovery UI live on http://localhost:${port}/ui`)
   })
+
+  attachGracefulShutdown(server)
+}
+
+function shutdown(server: Server) {
+  server.close(() => {
+    process.exit(0)
+  })
+
+  setTimeout(() => {
+    console.error(
+      'Could not close connections in time, forcefully shutting down',
+    )
+    process.exit(1)
+  }, 10000)
+}
+
+function attachGracefulShutdown(server: Server) {
+  process.on('SIGTERM', () => shutdown(server))
+  process.on('SIGINT', () => shutdown(server))
 }

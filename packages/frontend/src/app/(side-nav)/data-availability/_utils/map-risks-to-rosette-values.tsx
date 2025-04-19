@@ -1,68 +1,38 @@
-import { type DaBridgeRisks, type DaLayerRisks } from '@l2beat/config'
-import {
-  type Sentiment,
-  type ValueWithSentiment,
-  type WarningValueWithSentiment,
-} from '@l2beat/shared-pure'
-import { type RosetteValue } from '~/components/rosette/types'
+import type { DaBridgeRisks } from '@l2beat/config'
+import type { RosetteValue } from '~/components/rosette/types'
+import type { AdjustedDaLayerRisks } from '~/server/features/data-availability/utils/get-da-layer-risks'
 
 export function mapLayerRisksToRosetteValues(
-  risks: Record<
-    keyof DaLayerRisks,
-    ValueWithSentiment<string, Sentiment> & {
-      description?: string
-      warning?: WarningValueWithSentiment
-    }
-  >,
+  risks: AdjustedDaLayerRisks,
 ): RosetteValue[] {
-  return [
-    {
-      name: 'Economic security',
-      value: risks.economicSecurity.value,
-      sentiment: risks.economicSecurity.sentiment,
-      description: risks.economicSecurity.description,
-      warning: risks.economicSecurity.warning,
-    },
-    {
-      name: 'Fraud detection',
-      value: risks.fraudDetection.value,
-      sentiment: risks.fraudDetection.sentiment,
-      description: risks.fraudDetection.description,
-      warning: risks.fraudDetection.warning,
-    },
-  ]
+  const values: RosetteValue[] = []
+  if (risks.daLayer) {
+    values.push({ name: 'DA Layer', ...risks.daLayer })
+  }
+  if (risks.economicSecurity) {
+    values.push({ name: 'Economic security', ...risks.economicSecurity })
+  }
+  if (risks.fraudDetection) {
+    values.push({ name: 'Fraud detection', ...risks.fraudDetection })
+  }
+  return values
 }
 
 export function mapBridgeRisksToRosetteValues(
-  risks: Record<
-    keyof DaBridgeRisks,
-    ValueWithSentiment<string, Sentiment> & {
-      description?: string
-      warning?: WarningValueWithSentiment
-    }
-  >,
+  risks: DaBridgeRisks,
 ): RosetteValue[] {
-  return [
-    {
-      name: 'Committee security',
-      value: risks.committeeSecurity.value,
-      sentiment: risks.committeeSecurity.sentiment,
-      description: risks.committeeSecurity.description,
-      warning: risks.committeeSecurity.warning,
-    },
-    {
-      name: 'Upgradeability',
-      value: risks.upgradeability.value,
-      sentiment: risks.upgradeability.sentiment,
-      description: risks.upgradeability.description,
-      warning: risks.upgradeability.warning,
-    },
-    {
-      name: 'Relayer failure',
-      value: risks.relayerFailure.value,
-      sentiment: risks.relayerFailure.sentiment,
-      description: risks.relayerFailure.description,
-      warning: risks.relayerFailure.warning,
-    },
-  ]
+  const values: RosetteValue[] = []
+  if (risks.daBridge) {
+    values.push({ name: 'DA Bridge', ...risks.daBridge })
+  }
+  if (risks.committeeSecurity) {
+    values.push({ name: 'Committee security', ...risks.committeeSecurity })
+  }
+  if (risks.upgradeability) {
+    values.push({ name: 'Upgradeability', ...risks.upgradeability })
+  }
+  if (risks.relayerFailure) {
+    values.push({ name: 'Relayer failure', ...risks.relayerFailure })
+  }
+  return values
 }

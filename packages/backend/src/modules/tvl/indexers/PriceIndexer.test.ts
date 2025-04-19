@@ -1,24 +1,24 @@
 import { Logger } from '@l2beat/backend-tools'
-import { Database, PriceRecord } from '@l2beat/database'
+import type { Database, PriceRecord } from '@l2beat/database'
 import {
   CoingeckoId,
-  CoingeckoPriceConfigEntry,
+  type CoingeckoPriceConfigEntry,
   UnixTime,
 } from '@l2beat/shared-pure'
 import { expect, mockObject } from 'earl'
 import { mockDatabase } from '../../../test/database'
-import { IndexerService } from '../../../tools/uif/IndexerService'
+import type { IndexerService } from '../../../tools/uif/IndexerService'
 import { _TEST_ONLY_resetUniqueIds } from '../../../tools/uif/ids'
 import {
   actual,
   removal,
 } from '../../../tools/uif/multi/test/mockConfigurations'
-import {
+import type {
   Configuration,
   RemovalConfiguration,
 } from '../../../tools/uif/multi/types'
-import { PriceService } from '../services/PriceService'
-import { SyncOptimizer } from '../utils/SyncOptimizer'
+import type { PriceService } from '../services/PriceService'
+import type { SyncOptimizer } from '../utils/SyncOptimizer'
 import { PriceIndexer } from './PriceIndexer'
 
 describe(PriceIndexer.name, () => {
@@ -33,7 +33,7 @@ describe(PriceIndexer.name, () => {
       const adjustedTo = 200
 
       const priceService = mockObject<PriceService>({
-        calculateAdjustedTo: () => new UnixTime(adjustedTo),
+        calculateAdjustedTo: () => UnixTime(adjustedTo),
         getPrices: async () => [
           price('a', 100),
           price('a', 150), // will be filtered out, see syncOptimizer
@@ -49,7 +49,7 @@ describe(PriceIndexer.name, () => {
       })
 
       const syncOptimizer = mockObject<SyncOptimizer>({
-        shouldTimestampBeSynced: (t: UnixTime) => !(t.toNumber() % 100),
+        shouldTimestampBeSynced: (t: UnixTime) => !(t % 100),
       })
 
       const parameters = {
@@ -82,8 +82,8 @@ describe(PriceIndexer.name, () => {
       )
 
       expect(priceService.getPrices).toHaveBeenOnlyCalledWith(
-        new UnixTime(from),
-        new UnixTime(adjustedTo),
+        UnixTime(from),
+        UnixTime(adjustedTo),
         parameters.coingeckoId,
         configurations,
       )
@@ -91,12 +91,12 @@ describe(PriceIndexer.name, () => {
       expect(
         syncOptimizer.shouldTimestampBeSynced.calls.map((c) => c.args[0]),
       ).toEqual([
-        new UnixTime(100),
-        new UnixTime(150),
-        new UnixTime(200),
-        new UnixTime(100),
-        new UnixTime(150),
-        new UnixTime(200),
+        UnixTime(100),
+        UnixTime(150),
+        UnixTime(200),
+        UnixTime(100),
+        UnixTime(150),
+        UnixTime(200),
       ])
 
       expect(priceRepository.insertMany).toHaveBeenOnlyCalledWith([
@@ -140,13 +140,13 @@ describe(PriceIndexer.name, () => {
       expect(priceRepository.deleteByConfigInTimeRange).toHaveBeenNthCalledWith(
         1,
         'a',
-        new UnixTime(100),
-        new UnixTime(200),
+        UnixTime(100),
+        UnixTime(200),
       )
 
       expect(
         priceRepository.deleteByConfigInTimeRange,
-      ).toHaveBeenLastCalledWith('b', new UnixTime(200), new UnixTime(300))
+      ).toHaveBeenLastCalledWith('b', UnixTime(200), UnixTime(300))
     })
   })
 })
@@ -154,7 +154,7 @@ describe(PriceIndexer.name, () => {
 function price(configId: string, timestamp: number): PriceRecord {
   return {
     configId,
-    timestamp: new UnixTime(timestamp),
+    timestamp: UnixTime(timestamp),
     priceUsd: timestamp, // for simplicity it equals timestamp
   }
 }

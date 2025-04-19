@@ -1,6 +1,6 @@
 import { UnixTime } from '@l2beat/shared-pure'
-import { Insertable, Selectable } from 'kysely'
-import { Amount } from '../../kysely/generated/types'
+import type { Insertable, Selectable } from 'kysely'
+import type { Amount } from '../../kysely/generated/types'
 
 export interface AmountRecord {
   timestamp: UnixTime
@@ -18,7 +18,7 @@ export function toRecord(entity: Selectable<Amount>): AmountRecord {
 
 export function toRow(amounts: AmountRecord): Insertable<Amount> {
   return {
-    timestamp: amounts.timestamp.toDate(),
+    timestamp: UnixTime.toDate(amounts.timestamp),
     amount: amounts.amount.toString(),
     configurationId: amounts.configId,
   }

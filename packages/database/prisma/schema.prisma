@@ -73,11 +73,18 @@ model BlockTimestamp {
   @@id([chain, timestamp])
 }
 
+model DataAvailability {
+  timestamp DateTime @db.Timestamp(6)
+  daLayer   String   @db.VarChar(255)
+  projectId String   @db.VarChar(255)
+  totalSize BigInt
+
+  @@id([timestamp, daLayer, projectId])
+}
+
 model DiscoveryCache {
-  key         String @id
-  value       String
-  blockNumber Int
-  chain       String @db.VarChar(255)
+  key   String @id
+  value String
 }
 
 model Finality {
@@ -175,6 +182,16 @@ model UpdateNotifier {
   @@index([projectName])
 }
 
+model UpdateMessage {
+  projectName String   @db.VarChar(255)
+  chain       String   @db.VarChar(255)
+  blockNumber Int
+  timestamp   DateTime @db.Timestamp(6)
+  message     String   @db.Text
+
+  @@id([projectName, chain, blockNumber])
+}
+
 model Value {
   timestamp                   DateTime @db.Timestamp(6)
   projectId                   String   @db.VarChar(255)
@@ -235,4 +252,63 @@ model FlatSources {
   flat        Json
 
   @@id([projectName, chainId])
+}
+
+model TvsAmount {
+  timestamp       DateTime @db.Timestamp(6)
+  configurationId String   @db.Char(12)
+  amount          Decimal  @db.Decimal(80, 0)
+
+  @@id([timestamp, configurationId])
+}
+
+model TvsBlockTimestamp {
+  timestamp       DateTime @db.Timestamp(6)
+  configurationId String   @db.Char(12)
+  chain           String   @db.VarChar(255)
+  blockNumber     Int
+
+  @@id([timestamp, configurationId])
+  @@index([chain])
+}
+
+model TvsPrice {
+  timestamp       DateTime @db.Timestamp(6)
+  configurationId String   @db.Char(12)
+  priceId         String   @db.VarChar(255)
+  priceUsd        Float    @db.Real
+
+  @@id([timestamp, configurationId])
+  @@index([priceId])
+}
+
+model TokenValue {
+  timestamp       DateTime @db.Timestamp(6)
+  configurationId String   @db.Char(12)
+  projectId       String   @db.VarChar(255)
+  tokenId         String   @db.VarChar(255)
+  amount          Float    @db.Real
+  value           Float    @db.Real
+  valueForProject Float    @db.Real
+  valueForSummary Float    @db.Real
+
+  @@id([timestamp, configurationId])
+  @@index([projectId])
+  @@index([tokenId])
+}
+
+model ProjectValue {
+  timestamp  DateTime @db.Timestamp(6)
+  project    String   @db.VarChar(255)
+  type       String   @db.VarChar(255)
+  value      Float    @db.Real
+  canonical  Float    @db.Real
+  external   Float    @db.Real
+  native     Float    @db.Real
+  ether      Float    @db.Real
+  stablecoin Float    @db.Real
+  other      Float    @db.Real
+  associated Float    @db.Real
+
+  @@id([timestamp, project, type])
 }

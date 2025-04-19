@@ -1,4 +1,5 @@
 import { Logger } from '@l2beat/backend-tools'
+import { HttpClient } from '@l2beat/shared'
 import chalk from 'chalk'
 import {
   boolean,
@@ -11,10 +12,14 @@ import {
   string,
 } from 'cmd-ts'
 import { getChainConfig, getChainConfigs } from '../config/config.discovery'
-import { DiscoveryChainConfig, DiscoveryModuleConfig } from '../config/types'
+import type {
+  DiscoveryChainConfig,
+  DiscoveryModuleConfig,
+} from '../config/types'
 import { ConfigReader } from '../discovery/config/ConfigReader'
+import { getDiscoveryPaths } from '../discovery/config/getDiscoveryPaths'
 import { dryRunDiscovery, runDiscovery } from '../discovery/runDiscovery'
-import { HttpClient } from '../utils/HttpClient'
+import { configureLogger } from './logger'
 import { ChainValue } from './types'
 
 export const DiscoverCommandArgs = {
@@ -45,11 +50,27 @@ export const DiscoverCommandArgs = {
     short: 'c',
     description: 'show the count of calls to external RPCs',
   }),
+  verboseTemplatization: flag({
+    type: boolean,
+    long: 'templatization',
+    short: 't',
+    description: 'show templatization status of every contract',
+  }),
   saveSources: flag({
     type: boolean,
     long: 'save-sources',
     short: 's',
     description: 'save raw sources downloaded from chain explorer',
+  }),
+  buildModels: flag({
+    type: boolean,
+    long: 'build-models',
+    description: 'build models for every contract',
+  }),
+  buildProjectPageFacts: flag({
+    type: boolean,
+    long: 'build-project-page-facts',
+    description: 'build project page facts',
   }),
   sourcesFolder: option({
     type: optional(string),
@@ -76,6 +97,11 @@ export const DiscoverCommandArgs = {
     short: 'b',
     description: 'the block number on which the discovery will be performed',
   }),
+  overwriteCache: flag({
+    type: boolean,
+    long: 'overwrite-cache',
+    description: 'overwrite the cache entries',
+  }),
 }
 
 export const DiscoverCommand = command({
@@ -100,13 +126,23 @@ export async function discover(
   logger: Logger = Logger.DEBUG,
 ): Promise<void> {
   const http = new HttpClient()
-  const configReader = new ConfigReader()
+  const paths = getDiscoveryPaths()
+  const configReader = new ConfigReader(paths.discovery)
+
+  logger = configureLogger(logger)
 
   if (config.dryRun) {
     logger = logger.for('DryRun')
     logger.info('Starting')
 
-    await dryRunDiscovery(http, configReader, config, chainConfigs)
+    await dryRunDiscovery(
+      paths,
+      http,
+      configReader,
+      config,
+      chainConfigs,
+      logger,
+    )
     return
   }
 
@@ -116,5 +152,5 @@ export async function discover(
       config.chain.name,
     )}`,
   )
-  await runDiscovery(http, configReader, config, chainConfigs)
+  await runDiscovery(paths, http, configReader, config, chainConfigs, logger)
 }

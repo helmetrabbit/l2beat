@@ -1,64 +1,64 @@
-import { type Layer2, type Layer3, layer2s, layer3s } from '@l2beat/config'
+import type {
+  Project,
+  ProjectScalingCategory,
+  ProjectScalingStack,
+} from '@l2beat/config'
 import { getL2Risks } from '~/app/(side-nav)/scaling/_utils/get-l2-risks'
-import { groupByMainCategories } from '~/utils/group-by-main-categories'
-import {
-  type ProjectsChangeReport,
-  getProjectsChangeReport,
-} from '../../projects-change-report/get-projects-change-report'
-import { getProjectsVerificationStatuses } from '../../verification-status/get-projects-verification-statuses'
+import { groupByScalingTabs } from '~/app/(side-nav)/scaling/_utils/group-by-scaling-tabs'
+import type { RosetteValue } from '~/components/rosette/types'
+import { ps } from '~/server/projects'
+import type { ProjectChanges } from '../../projects-change-report/get-projects-change-report'
+import { getProjectsChangeReport } from '../../projects-change-report/get-projects-change-report'
+import type { CommonScalingEntry } from '../get-common-scaling-entry'
 import { getCommonScalingEntry } from '../get-common-scaling-entry'
-import {
-  type LatestTvl,
-  get7dTokenBreakdown,
-} from '../tvl/utils/get-7d-token-breakdown'
-import { orderByTvl } from '../tvl/utils/order-by-tvl'
+import { get7dTvsBreakdown } from '../tvs/get-7d-tvs-breakdown'
+import type { ProjectSevenDayTvsBreakdown } from '../tvs/get-7d-tvs-breakdown'
+import { compareTvs } from '../tvs/utils/compare-tvs'
 
 export async function getScalingArchivedEntries() {
-  const [projectsChangeReport, projectsVerificationStatuses, tvl] =
-    await Promise.all([
-      getProjectsChangeReport(),
-      getProjectsVerificationStatuses(),
-      get7dTokenBreakdown({ type: 'layer2' }),
-    ])
-
-  const projects = [...layer2s, ...layer3s].filter((p) => p.isArchived)
+  const [projectsChangeReport, tvs, projects] = await Promise.all([
+    getProjectsChangeReport(),
+    get7dTvsBreakdown({ type: 'layer2' }),
+    ps.getProjects({
+      select: ['statuses', 'scalingInfo', 'scalingRisks', 'display'],
+      where: ['isScaling', 'archivedAt'],
+    }),
+  ])
 
   const entries = projects.map((project) =>
     getScalingArchivedEntry(
       project,
-      !!projectsVerificationStatuses[project.id.toString()],
-      projectsChangeReport,
-      tvl.projects[project.id.toString()],
+      projectsChangeReport.getChanges(project.id),
+      tvs.projects[project.id.toString()],
     ),
   )
 
-  // Use data we already pulled instead of fetching it again
-  const remappedForOrdering = Object.fromEntries(
-    Object.entries(tvl.projects).map(([k, v]) => [k, v.breakdown.total]),
-  )
-  return groupByMainCategories(orderByTvl(entries, remappedForOrdering))
+  return groupByScalingTabs(entries.sort(compareTvs))
 }
 
-export type ScalingArchivedEntry = ReturnType<typeof getScalingArchivedEntry>
+export interface ScalingArchivedEntry extends CommonScalingEntry {
+  category: ProjectScalingCategory
+  purposes: string[]
+  stack: ProjectScalingStack | undefined
+  risks: RosetteValue[] | undefined
+  totalTvs: number | undefined
+  tvsOrder: number
+}
 
 function getScalingArchivedEntry(
-  project: Layer2 | Layer3,
-  isVerified: boolean,
-  projectsChangeReport: ProjectsChangeReport,
-  latestTvl: LatestTvl['projects'][string] | undefined,
-) {
+  project: Project<'scalingInfo' | 'statuses' | 'scalingRisks' | 'display'>,
+  changes: ProjectChanges,
+  latestTvs: ProjectSevenDayTvsBreakdown | undefined,
+): ScalingArchivedEntry {
   return {
-    entryType: 'archived' as const,
-    ...getCommonScalingEntry({
-      project,
-      isVerified,
-      hasImplementationChanged: projectsChangeReport.hasImplementationChanged(
-        project.id,
-      ),
-      hasHighSeverityFieldChanged:
-        projectsChangeReport.hasHighSeverityFieldChanged(project.id),
-    }),
-    risks: project.type === 'layer2' ? getL2Risks(project.riskView) : undefined,
-    totalTvl: latestTvl?.breakdown.total,
+    ...getCommonScalingEntry({ project, changes }),
+    category: project.scalingInfo.type,
+    purposes: project.scalingInfo.purposes,
+    stack: project.scalingInfo.stack,
+    risks: getL2Risks(
+      project.scalingRisks.stacked ?? project.scalingRisks.self,
+    ),
+    totalTvs: latestTvs?.breakdown.total,
+    tvsOrder: latestTvs?.breakdown.total ?? -1,
   }
 }

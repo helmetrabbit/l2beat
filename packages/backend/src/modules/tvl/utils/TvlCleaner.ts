@@ -1,10 +1,10 @@
-import { Logger } from '@l2beat/backend-tools'
-import { UnixTime } from '@l2beat/shared-pure'
+import type { Logger } from '@l2beat/backend-tools'
+import type { UnixTime } from '@l2beat/shared-pure'
 
-import { Database } from '@l2beat/database'
-import { Clock } from '../../../tools/Clock'
+import type { Database } from '@l2beat/database'
+import type { Clock } from '../../../tools/Clock'
 import { TaskQueue } from '../../../tools/queue/TaskQueue'
-import { SyncOptimizer } from './SyncOptimizer'
+import type { SyncOptimizer } from './SyncOptimizer'
 
 export interface TvlRepositoryToClean {
   deleteHourlyUntil: (dateRange: {
@@ -61,8 +61,10 @@ export class TvlCleaner {
         await this.db.tvlCleaner.findByRepositoryName(repositoryName)
 
       if (
-        tvlCleanerRecord?.hourlyCleanedUntil?.gte(hourlyDeletionBoundary) &&
-        tvlCleanerRecord.sixHourlyCleanedUntil?.gte(sixHourlyDeletionBoundary)
+        tvlCleanerRecord?.hourlyCleanedUntil &&
+        tvlCleanerRecord.sixHourlyCleanedUntil &&
+        tvlCleanerRecord.hourlyCleanedUntil >= hourlyDeletionBoundary &&
+        tvlCleanerRecord.sixHourlyCleanedUntil >= sixHourlyDeletionBoundary
       ) {
         this.logger.info(
           `Nothing to clean for ${repositoryName}, waiting for next hour`,

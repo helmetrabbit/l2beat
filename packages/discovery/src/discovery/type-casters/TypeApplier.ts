@@ -1,12 +1,12 @@
-import { ContractValue } from '@l2beat/discovery-types'
-import { utils } from 'ethers'
+import type { utils } from 'ethers'
+import type { ContractValue } from '../output/types'
 
 import { assert } from '@l2beat/shared-pure'
-import { DiscoveryCustomType } from '../config/RawDiscoveryConfig'
+import type { DiscoveryCustomType } from '../config/StructureConfig'
 import { getCustomTypeCaster, isCustomTypeCaster } from '../type-casters'
 import {
-  TupleType,
-  Type,
+  type TupleType,
+  type Type,
   getReturnType,
   parseReturnType,
 } from '../utils/parseReturnType'

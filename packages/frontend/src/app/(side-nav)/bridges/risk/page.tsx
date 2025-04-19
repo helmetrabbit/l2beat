@@ -1,12 +1,10 @@
-import { MainPageCard } from '~/components/main-page-card'
-import { MainPageHeader } from '~/components/main-page-header'
+import { PrimaryCard } from '~/components/primary-card/primary-card'
+import { TableFilterContextProvider } from '~/components/table/filters/table-filter-context'
 import { getBridgeRiskEntries } from '~/server/features/bridges/get-bridges-risk-entries'
 import { getDefaultMetadata } from '~/utils/metadata'
-import { BridgesFilterContextProvider } from '../_components/bridges-filter-context'
-import { BridgesMvpWarning } from '../_components/bridges-mvp-warning'
+import { BridgesHeader } from '../_components/bridges-header'
 import { BridgesRiskTable } from './_components/table/bridges-risks-table'
 
-export const revalidate = 600
 export const metadata = getDefaultMetadata({
   openGraph: {
     url: '/bridges/risk',
@@ -18,13 +16,12 @@ export default async function Page() {
 
   return (
     <>
-      <BridgesFilterContextProvider>
-        <MainPageHeader>Risk Analysis</MainPageHeader>
-        <BridgesMvpWarning className="md:mb-3" sidebar />
-        <MainPageCard>
+      <TableFilterContextProvider>
+        <BridgesHeader>Risk Analysis</BridgesHeader>
+        <PrimaryCard>
           <BridgesRiskTable entries={entries} />
-        </MainPageCard>
-      </BridgesFilterContextProvider>
+        </PrimaryCard>
+      </TableFilterContextProvider>
     </>
   )
 }

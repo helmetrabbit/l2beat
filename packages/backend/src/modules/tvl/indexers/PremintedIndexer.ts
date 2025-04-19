@@ -1,9 +1,13 @@
-import { INDEXER_NAMES, createAmountId, createIndexerTag } from '@l2beat/config'
-import { AmountRecord } from '@l2beat/database'
+import {
+  INDEXER_NAMES,
+  createAmountId,
+  createIndexerTag,
+} from '@l2beat/backend-shared'
+import type { AmountRecord } from '@l2beat/database'
 import { assert, UnixTime } from '@l2beat/shared-pure'
 import { Indexer } from '@l2beat/uif'
 import { ManagedChildIndexer } from '../../../tools/uif/ManagedChildIndexer'
-import { PremintedIndexerDeps } from './types'
+import type { PremintedIndexerDeps } from './types'
 
 export class PremintedIndexer extends ManagedChildIndexer {
   private readonly configurationId: string
@@ -24,11 +28,11 @@ export class PremintedIndexer extends ManagedChildIndexer {
 
   async update(from: number, to: number): Promise<number> {
     const timestamp = this.$.syncOptimizer.getTimestampToSync(from)
-    if (timestamp.toNumber() > to) {
+    if (timestamp > to) {
       this.logger.info('Skipping update due to sync optimization', {
         from,
         to,
-        timestamp: timestamp.toNumber(),
+        timestamp: timestamp,
       })
       return to
     }
@@ -37,7 +41,7 @@ export class PremintedIndexer extends ManagedChildIndexer {
       this.logger.info('Skipping update due to minHeight', {
         from,
         to,
-        timestamp: timestamp.toNumber(),
+        timestamp: timestamp,
       })
       return to
     }
@@ -49,16 +53,16 @@ export class PremintedIndexer extends ManagedChildIndexer {
     if (escrowAmount.amount < circulatingSupply.amount) {
       await this.$.db.amount.insertMany([escrowAmount])
       this.logger.info(`Saved escrow amount into DB`, {
-        timestamp: timestamp.toNumber(),
+        timestamp: timestamp,
       })
     } else {
       await this.$.db.amount.insertMany([circulatingSupply])
       this.logger.info(`Saved circulating supply into DB`, {
-        timestamp: timestamp.toNumber(),
+        timestamp: timestamp,
       })
     }
 
-    return timestamp.toNumber()
+    return timestamp
   }
 
   private async getCirculatingSupply(
@@ -85,7 +89,7 @@ export class PremintedIndexer extends ManagedChildIndexer {
     )
 
     this.logger.info('Fetched circulating supply', {
-      timestamp: timestamp.toNumber(),
+      timestamp: timestamp,
     })
 
     return circulatingSupplyAmounts[0]
@@ -113,7 +117,7 @@ export class PremintedIndexer extends ManagedChildIndexer {
     )
 
     this.logger.info('Fetched escrow amount', {
-      timestamp: timestamp.toNumber(),
+      timestamp: timestamp,
       blockNumber,
     })
 
@@ -126,17 +130,14 @@ export class PremintedIndexer extends ManagedChildIndexer {
         this.$.configuration.chain,
         timestamp,
       )
-    assert(
-      blockNumber,
-      `Block number not found for timestamp: ${timestamp.toNumber()}`,
-    )
+    assert(blockNumber, `Block number not found for timestamp: ${timestamp}`)
     return blockNumber
   }
 
   override async invalidate(targetHeight: number): Promise<number> {
     const deletedRecords = await this.$.db.amount.deleteByConfigAfter(
       this.configurationId,
-      new UnixTime(targetHeight),
+      UnixTime(targetHeight),
     )
 
     if (deletedRecords > 0) {

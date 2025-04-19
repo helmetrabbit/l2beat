@@ -1,124 +1,116 @@
-import { type Layer2, type Layer3 } from '@l2beat/config'
-import { assert, ProjectId, notUndefined } from '@l2beat/shared-pure'
+import type { Project } from '@l2beat/config'
+import { assert, ProjectId } from '@l2beat/shared-pure'
+import { groupByScalingTabs } from '~/app/(side-nav)/scaling/_utils/group-by-scaling-tabs'
 import { env } from '~/env'
-import { groupByMainCategories } from '~/utils/group-by-main-categories'
-import {
-  type ProjectsChangeReport,
-  getProjectsChangeReport,
-} from '../../projects-change-report/get-projects-change-report'
-import { getCurrentEntry } from '../../utils/get-current-entry'
-import { getProjectsVerificationStatuses } from '../../verification-status/get-projects-verification-statuses'
+import { ps } from '~/server/projects'
+import type { ProjectChanges } from '../../projects-change-report/get-projects-change-report'
+import { getProjectsChangeReport } from '../../projects-change-report/get-projects-change-report'
+import type { CommonScalingEntry } from '../get-common-scaling-entry'
 import { getCommonScalingEntry } from '../get-common-scaling-entry'
-import {
-  orderByStageAndPastDayUops,
-  sortByUops,
-} from '../utils/order-by-stage-and-past-day-uops'
-import {
-  type ActivityProjectTableData,
-  getActivityTable,
-} from './get-activity-table-data'
-import { getActivityProjects } from './utils/get-activity-projects'
-
-type ActivityProject = Layer2 | Layer3
+import type { ActivityProjectTableData } from './get-activity-table-data'
+import { getActivityTable } from './get-activity-table-data'
+import { compareActivityEntry } from './utils/compare-activity-entry'
+import { getActivitySyncWarning } from './utils/is-activity-synced'
 
 export async function getScalingActivityEntries() {
-  const projects = getActivityProjects()
-  const [projectsVerificationStatuses, projectsChangeReport, activityData] =
-    await Promise.all([
-      getProjectsVerificationStatuses(),
-      getProjectsChangeReport(),
-      getActivityTable(projects),
-    ])
+  const unfilteredProjects = await ps.getProjects({
+    select: ['statuses', 'scalingInfo', 'hasActivity', 'display'],
+    where: ['isScaling'],
+    whereNot: ['isUpcoming', 'archivedAt'],
+  })
+  const projects = unfilteredProjects.filter(
+    (p) => !env.EXCLUDED_ACTIVITY_PROJECTS?.includes(p.id.toString()),
+  )
+  const [projectsChangeReport, activityData] = await Promise.all([
+    getProjectsChangeReport(),
+    getActivityTable(projects),
+  ])
 
   const ethereumData = activityData[ProjectId.ETHEREUM]
   assert(ethereumData !== undefined, 'Ethereum data not found')
-  const ethereumEntry = getEthereumEntry(ethereumData)
 
   const entries = projects
-    .map((project) => {
-      const isVerified = !!projectsVerificationStatuses[project.id]
-      const data = activityData[project.id]
-      if (!data) {
-        return undefined
-      }
-      return getScalingProjectActivityEntry(
+    .map((project) =>
+      getScalingProjectActivityEntry(
         project,
-        data,
-        isVerified,
-        projectsChangeReport,
-      )
-    })
-    .filter(notUndefined)
-    .sort((a, b) => b.data.uops.pastDayCount - a.data.uops.pastDayCount)
+        projectsChangeReport.getChanges(project.id),
+        activityData[project.id],
+      ),
+    )
+    .concat([
+      getEthereumEntry(ethereumData, 'rollups'),
+      getEthereumEntry(ethereumData, 'validiumsAndOptimiums'),
+      getEthereumEntry(ethereumData, 'others'),
+    ])
+    .sort(compareActivityEntry)
 
-  const categorisedEntries = groupByMainCategories(
-    orderByStageAndPastDayUops(entries),
-  )
+  return groupByScalingTabs(entries)
+}
 
-  if (!env.NEXT_PUBLIC_FEATURE_FLAG_STAGE_SORTING) {
-    return {
-      rollups: [ethereumEntry, ...categorisedEntries.rollups].sort(sortByUops),
-      validiumsAndOptimiums: [
-        ethereumEntry,
-        ...categorisedEntries.validiumsAndOptimiums,
-      ].sort(sortByUops),
-      others: categorisedEntries.others
-        ? [ethereumEntry, ...categorisedEntries.others].sort(sortByUops)
-        : undefined,
-    }
-  }
+export interface ScalingActivityEntry extends CommonScalingEntry {
+  data:
+    | {
+        tps: ActivityData
+        uops: ActivityData
+        ratio: number
+        isSynced: boolean
+      }
+    | undefined
+}
 
-  return {
-    rollups: [ethereumEntry, ...categorisedEntries.rollups],
-    validiumsAndOptimiums: [
-      ethereumEntry,
-      ...categorisedEntries.validiumsAndOptimiums,
-    ],
-    others: categorisedEntries.others
-      ? [ethereumEntry, ...categorisedEntries.others]
-      : undefined,
+interface ActivityData {
+  change: number
+  pastDayCount: number
+  summedCount: number
+  maxCount: {
+    value: number
+    timestamp: number
   }
 }
 
-export type ScalingActivityEntry = ReturnType<
-  typeof getScalingProjectActivityEntry
->
 function getScalingProjectActivityEntry(
-  project: ActivityProject,
-  data: ActivityProjectTableData,
-  isVerified: boolean,
-  projectsChangeReport: ProjectsChangeReport,
-) {
-  const currentDataAvailability = getCurrentEntry(project.dataAvailability)
+  project: Project<'statuses' | 'scalingInfo' | 'display'>,
+  changes: ProjectChanges,
+  data: ActivityProjectTableData | undefined,
+): ScalingActivityEntry {
+  const syncWarning = data
+    ? getActivitySyncWarning(data.syncedUntil)
+    : undefined
   return {
-    ...getCommonScalingEntry({
-      project,
-      isVerified,
-      hasImplementationChanged: projectsChangeReport.hasImplementationChanged(
-        project.id,
-      ),
-      hasHighSeverityFieldChanged:
-        projectsChangeReport.hasHighSeverityFieldChanged(project.id),
-    }),
-    entryType: 'activity' as const,
-    dataSource: project.display.activityDataSource,
-    dataAvailability: {
-      layer: currentDataAvailability?.layer,
-    },
-    data,
+    ...getCommonScalingEntry({ project, changes, syncWarning }),
+    data: data
+      ? {
+          tps: data.tps,
+          uops: data.uops,
+          ratio: data.ratio,
+          isSynced: !syncWarning,
+        }
+      : undefined,
   }
 }
 
 function getEthereumEntry(
   data: ActivityProjectTableData,
+  tab: CommonScalingEntry['tab'],
 ): ScalingActivityEntry {
+  const notSyncedStatus = data
+    ? getActivitySyncWarning(data.syncedUntil)
+    : undefined
   return {
-    ...getCommonScalingEntry({ project: 'ethereum' }),
-    entryType: 'activity' as const,
-    dataSource: 'Blockchain RPC' as const,
-    dataAvailability: {
-      layer: undefined,
+    id: ProjectId.ETHEREUM,
+    name: 'Ethereum',
+    shortName: undefined,
+    slug: 'ethereum',
+    tab,
+    // Ethereum is always at the top so it is always stageOrder 3
+    stageOrder: 3,
+    filterable: undefined,
+    data: {
+      tps: data.tps,
+      uops: data.uops,
+      ratio: data.ratio,
+      isSynced: !notSyncedStatus,
     },
-    data,
+    statuses: undefined,
   }
 }

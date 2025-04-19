@@ -4,10 +4,7 @@ import tailwindcssAnimate from 'tailwindcss-animate'
 import plugin from 'tailwindcss/plugin'
 
 const config: Config = {
-  content: [
-    './src/**/*.{js,ts,jsx,tsx,mdx}',
-    './.storybook/**/*.{js,ts,jsx,tsx}',
-  ],
+  content: ['./src/**/*.{js,ts,jsx,tsx,mdx}'],
   darkMode: 'class',
   future: {
     hoverOnlyWhenSupported: true,
@@ -81,10 +78,6 @@ const config: Config = {
         900: '#2F2F2F',
         950: '#111111',
       },
-      'n-gray': {
-        200: '#E6E7EC',
-        400: '#AEB1C2',
-      },
       black: '#1B1B1B',
       yellow: {
         100: '#FFDD28',
@@ -109,14 +102,14 @@ const config: Config = {
         700: '#4A133C',
         800: '#32102A',
       },
-      indigo: {
-        500: '#7252F2',
-      },
       pink: {
         100: '#FF46C0',
         200: '#DB8BF7',
         800: '#B94DDF',
         900: '#AB3BD2',
+      },
+      'n-pink': {
+        400: '#FC49C2',
       },
       green: {
         200: '#B0FFAA',
@@ -151,7 +144,6 @@ const config: Config = {
         550: '#1F87FF',
         600: '#2B5CD9',
         700: '#005DD7',
-        800: '#083575',
         900: '#112944',
         950: '#152A4B',
       },
@@ -168,22 +160,39 @@ const config: Config = {
       },
       sky: { 500: '#0074FD', 550: '#2670FF', 600: '#2083C1' },
       fuchsia: { 700: '#860CB0' },
+      'n-cyan': {
+        600: '#1C8BA4',
+      },
 
       // New colors
       primary: {
-        DEFAULT: 'var(--primary)',
-        invert: 'var(--primary-invert)',
+        DEFAULT: 'hsl(var(--primary))',
+        invert: 'hsl(var(--primary-invert))',
       },
-      secondary: 'var(--secondary)',
-      brand: 'var(--brand)',
-      background: 'var(--background)',
-      'surface-primary': 'var(--surface-primary)',
-      'surface-secondary': 'var(--surface-secondary)',
-      'surface-tertiary': 'var(--surface-tertiary)',
-      'surface-table-group': 'var(--surface-table-group)',
-      'icon-secondary': 'var(--icon-secondary)',
-      overlay: 'var(--overlay)',
-      divider: 'var(--divider)',
+      secondary: 'hsl(var(--secondary))',
+      positive: 'hsl(var(--positive))',
+      warning: 'hsl(var(--warning))',
+      negative: 'hsl(var(--negative))',
+      brand: 'hsl(var(--brand))',
+      background: 'hsl(var(--background))',
+      'background-reading': 'hsl(var(--background-reading))',
+      'surface-primary': 'hsl(var(--surface-primary))',
+      'surface-secondary': 'hsl(var(--surface-secondary))',
+      'surface-tertiary': 'hsl(var(--surface-tertiary))',
+      'header-secondary': 'hsl(var(--header-secondary))',
+      'header-primary': 'hsl(var(--header-primary))',
+      'icon-secondary': 'hsl(var(--icon-secondary))',
+      overlay: 'hsl(var(--overlay))',
+      divider: 'hsl(var(--divider))',
+      link: 'hsl(var(--link))',
+      'link-stroke': 'hsl(var(--link-stroke))',
+      'chart-ethereum': 'hsl(var(--chart-ethereum))',
+      'chart-da-celestia': 'hsl(var(--chart-da-celestia))',
+      'chart-emerald': 'hsl(var(--chart-emerald))',
+      'chart-stacked-blue': 'hsl(var(--chart-stacked-blue))',
+      'chart-stacked-yellow': 'hsl(var(--chart-stacked-yellow))',
+      'chart-stacked-pink': 'hsl(var(--chart-stacked-pink))',
+      'chart-stacked-purple': 'hsl(var(--chart-stacked-purple))',
     },
     screens: {
       xs: '400px',
@@ -194,8 +203,8 @@ const config: Config = {
     },
     zIndex: {
       1: '1',
-      10: '10', // Chart logo and Y axis, Borders (TvlActivityToggle and DesktopTabs)
-      20: '20', // Chart canvas and loader, Items (DesktopTabs, TvlActivityToggle)
+      10: '10', // Chart logo and Y axis, Borders (TvsActivityToggle and DesktopTabs)
+      20: '20', // Chart canvas and loader, Items (DesktopTabs, TvsActivityToggle)
       25: '25',
       30: '30', // Chart hover line
       40: '40', // Milestones, Chart hover line point (squares and circles)
@@ -206,6 +215,9 @@ const config: Config = {
       999: '999', // Mobile side menu
     },
     extend: {
+      boxShadow: {
+        popover: '0px 4px 12px 0px rgba(0, 0, 0, 0.55)',
+      },
       keyframes: {
         beat: {
           '0%': {
@@ -249,6 +261,28 @@ const config: Config = {
           },
           to: { height: '0', opacity: '0%' },
         },
+        'row-highlight': {
+          '0%': { backgroundColor: 'transparent' },
+          '12%': { backgroundColor: 'hsl(var(--row-highlight))' },
+          '32%': { backgroundColor: 'hsl(var(--row-highlight))' },
+          '44%': { backgroundColor: 'transparent' },
+          '52%': { backgroundColor: 'transparent' },
+          '64%': { backgroundColor: 'hsl(var(--row-highlight))' },
+          '84%': { backgroundColor: 'hsl(var(--row-highlight))' },
+          '96%': { backgroundColor: 'transparent' },
+          '100%': { backgroundColor: 'transparent' },
+        },
+        'row-highlight-no-opacity': {
+          '0%': { backgroundColor: 'hsl(var(--surface-primary))' },
+          '12%': { backgroundColor: 'hsl(var(--row-highlight-no-opacity))' },
+          '32%': { backgroundColor: 'hsl(var(--row-highlight-no-opacity))' },
+          '44%': { backgroundColor: 'hsl(var(--surface-primary))' },
+          '52%': { backgroundColor: 'hsl(var(--surface-primary))' },
+          '64%': { backgroundColor: 'hsl(var(--row-highlight-no-opacity))' },
+          '84%': { backgroundColor: 'hsl(var(--row-highlight-no-opacity))' },
+          '96%': { backgroundColor: 'hsl(var(--surface-primary))' },
+          '100%': { backgroundColor: 'hsl(var(--surface-primary))' },
+        },
       },
       animation: {
         beat: 'beat 5s ease-in-out infinite forwards',
@@ -256,6 +290,8 @@ const config: Config = {
         'accordion-up': 'accordion-up 0.2s ease-out',
         'collapsible-down': 'collapsible-down 0.3s ease-out',
         'collapsible-up': 'collapsible-up 0.3s ease-out',
+        'row-highlight': 'row-highlight 2.5s ease-in-out',
+        'row-highlight-no-opacity': 'row-highlight-no-opacity 2.5s ease-in-out',
       },
       fontFamily: {
         sans: ['var(--font-roboto)', 'Roboto', 'Arial', 'sans-serif'],
@@ -284,14 +320,16 @@ const config: Config = {
         height: 'height',
         'max-height': 'max-height',
       },
+      backgroundImage: {
+        'gradient-radial':
+          'radial-gradient(closest-side, var(--tw-gradient-stops))',
+      },
     },
   },
   plugins: [
     plugin((creator) => {
-      creator.addVariant('sidebar', '.sidebar &')
-    }),
-    plugin((creator) => {
-      creator.addVariant('main-page-card', '.main-page-card &')
+      creator.addVariant('primary-card', '.primary-card &')
+      creator.addUtilities({ '.primary-card': {} })
     }),
     tailwindcssAnimate,
     containerQueries,

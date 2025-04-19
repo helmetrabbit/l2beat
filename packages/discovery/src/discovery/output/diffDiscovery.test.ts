@@ -1,8 +1,8 @@
-import { ContractParameters } from '@l2beat/discovery-types'
 import { EthereumAddress } from '@l2beat/shared-pure'
 import { expect } from 'earl'
 
 import { diffDiscovery } from './diffDiscovery'
+import type { EntryParameters } from './types'
 
 describe(diffDiscovery.name, () => {
   const ADDRESS_A = EthereumAddress.random()
@@ -14,9 +14,10 @@ describe(diffDiscovery.name, () => {
   const ADMIN = EthereumAddress.random()
   const IMPLEMENTATION = EthereumAddress.random()
   it('finds changes, deleted and created contracts', () => {
-    const committed: ContractParameters[] = [
+    const committed: EntryParameters[] = [
       //finds changes
       {
+        type: 'Contract',
         name: 'A',
         address: ADDRESS_A,
         proxyType: 'EIP1967 proxy',
@@ -31,6 +32,7 @@ describe(diffDiscovery.name, () => {
       },
       //finds deleted contracts
       {
+        type: 'Contract',
         name: 'B',
         address: ADDRESS_B,
         proxyType: 'EIP1967 proxy',
@@ -41,6 +43,7 @@ describe(diffDiscovery.name, () => {
       },
       //skips unchanged contracts
       {
+        type: 'Contract',
         name: 'D',
         address: ADDRESS_D,
         proxyType: 'EIP1967 proxy',
@@ -50,6 +53,7 @@ describe(diffDiscovery.name, () => {
         },
       },
       {
+        type: 'Contract',
         name: 'E',
         address: ADDRESS_E,
         unverified: true,
@@ -60,8 +64,9 @@ describe(diffDiscovery.name, () => {
         },
       },
     ]
-    const discovered: ContractParameters[] = [
+    const discovered: EntryParameters[] = [
       {
+        type: 'Contract',
         name: 'A',
         address: ADDRESS_A,
         proxyType: 'EIP1967 proxy',
@@ -75,6 +80,7 @@ describe(diffDiscovery.name, () => {
       },
       //finds new contracts
       {
+        type: 'Contract',
         name: 'C',
         address: ADDRESS_C,
         proxyType: 'EIP1967 proxy',
@@ -84,6 +90,7 @@ describe(diffDiscovery.name, () => {
         },
       },
       {
+        type: 'Contract',
         name: 'D',
         address: ADDRESS_D,
         proxyType: 'EIP1967 proxy',
@@ -93,6 +100,7 @@ describe(diffDiscovery.name, () => {
         },
       },
       {
+        type: 'Contract',
         name: 'E',
         address: ADDRESS_E,
         unverified: true,
@@ -118,6 +126,7 @@ describe(diffDiscovery.name, () => {
             after: 'false',
             description: undefined,
             severity: undefined,
+            type: undefined,
           },
         ],
       },
@@ -137,8 +146,9 @@ describe(diffDiscovery.name, () => {
   })
 
   it('uses previous contract for description when deleted', () => {
-    const committed: ContractParameters[] = [
+    const committed: EntryParameters[] = [
       {
+        type: 'Contract',
         name: 'A',
         address: ADDRESS_A,
         proxyType: 'EIP1967 proxy',
@@ -147,7 +157,7 @@ describe(diffDiscovery.name, () => {
         values: {},
       },
     ]
-    const discovered: ContractParameters[] = []
+    const discovered: EntryParameters[] = []
 
     const result = diffDiscovery(committed, discovered)
 
@@ -162,9 +172,10 @@ describe(diffDiscovery.name, () => {
   })
 
   it('uses current contract for description when created', () => {
-    const committed: ContractParameters[] = []
-    const discovered: ContractParameters[] = [
+    const committed: EntryParameters[] = []
+    const discovered: EntryParameters[] = [
       {
+        type: 'Contract',
         name: 'A',
         address: ADDRESS_A,
         proxyType: 'EIP1967 proxy',
@@ -187,8 +198,9 @@ describe(diffDiscovery.name, () => {
   })
 
   it('uses current contract for description when modified', () => {
-    const committed: ContractParameters[] = [
+    const committed: EntryParameters[] = [
       {
+        type: 'Contract',
         name: 'A',
         address: ADDRESS_A,
         proxyType: 'EIP1967 proxy',
@@ -197,8 +209,9 @@ describe(diffDiscovery.name, () => {
         values: { v: 1 },
       },
     ]
-    const discovered: ContractParameters[] = [
+    const discovered: EntryParameters[] = [
       {
+        type: 'Contract',
         name: 'A',
         address: ADDRESS_A,
         proxyType: 'EIP1967 proxy',
@@ -221,6 +234,7 @@ describe(diffDiscovery.name, () => {
             description: undefined,
             key: 'description',
             severity: undefined,
+            type: undefined,
           },
           {
             after: '2',
@@ -228,6 +242,7 @@ describe(diffDiscovery.name, () => {
             description: undefined,
             key: 'values.v',
             severity: undefined,
+            type: undefined,
           },
         ],
         description: 'hello sailor',

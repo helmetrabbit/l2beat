@@ -1,72 +1,63 @@
 import { createColumnHelper } from '@tanstack/react-table'
+import { compact } from 'lodash'
 import { TotalCell } from '~/app/(side-nav)/scaling/summary/_components/table/total-cell'
-import { NoDataBadge } from '~/components/badge/no-data-badge'
-import { NoInfoCell } from '~/components/table/cells/no-info-cell'
-import { RiskCell } from '~/components/table/cells/risk-cell'
-import { TypeCell } from '~/components/table/cells/type-cell'
-import { sortBySentimentAndAlphabetically } from '~/components/table/sorting/functions/sort-by-sentiment'
+import { TableValueCell } from '~/components/table/cells/table-value-cell'
+import { TypeInfo } from '~/components/table/cells/type-info'
+import {
+  adjustTableValue,
+  sortTableValues,
+} from '~/components/table/sorting/sort-table-values'
 import { getBridgesCommonProjectColumns } from '~/components/table/utils/common-project-columns/bridges-common-project-columns'
-import { type BridgesSummaryEntry } from '~/server/features/bridges/get-bridges-summary-entries'
+import type { BridgesSummaryEntry } from '~/server/features/bridges/get-bridges-summary-entries'
 
 const columnHelper = createColumnHelper<BridgesSummaryEntry>()
 
-export const bridgesSummaryActiveColumns = [
-  ...getBridgesCommonProjectColumns(columnHelper),
-  columnHelper.accessor('validatedBy', {
-    header: 'Validated by',
-    cell: (ctx) => {
-      const validatedBy = ctx.getValue()
-
-      return validatedBy ? <RiskCell risk={validatedBy} /> : <NoInfoCell />
-    },
-    meta: {
-      tooltip: 'How are the messages sent via this bridge checked?',
-    },
-    sortUndefined: 'last',
-    sortingFn: (a, b) =>
-      sortBySentimentAndAlphabetically(
-        a.original.validatedBy,
-        b.original.validatedBy,
-      ),
-  }),
-  columnHelper.accessor('category', {
-    header: 'Type',
-    cell: (ctx) => {
-      return <TypeCell>{ctx.row.original.category}</TypeCell>
-    },
-    meta: {
-      tooltip:
-        'Token bridges use escrows and mint tokens. Liquidity Networks use pools and swap tokens. Hybrid do both.',
-    },
-  }),
-  columnHelper.accessor(
-    (e) => {
-      return e.tvl.breakdown?.total
-    },
-    {
+export function getBridgesSummaryActiveColumns(isOthers?: boolean) {
+  return compact([
+    ...getBridgesCommonProjectColumns(
+      columnHelper,
+      (row) => `/bridges/projects/${row.slug}`,
+    ),
+    columnHelper.accessor((e) => adjustTableValue(e.validatedBy), {
+      header: 'Validated by',
+      meta: {
+        tooltip: 'How are the messages sent via this bridge checked?',
+      },
+      cell: (ctx) => <TableValueCell value={ctx.row.original.validatedBy} />,
+      sortUndefined: 'last',
+      sortingFn: (a, b) =>
+        sortTableValues(a.original.validatedBy, b.original.validatedBy),
+    }),
+    isOthers &&
+      columnHelper.accessor('type', {
+        header: 'Type',
+        meta: {
+          tooltip:
+            'Token bridges use escrows and mint tokens. Liquidity Networks use pools and swap tokens. Hybrid do both.',
+        },
+        cell: (ctx) => <TypeInfo>{ctx.getValue()}</TypeInfo>,
+      }),
+    columnHelper.accessor((e) => e.tvs.breakdown?.total, {
       id: 'total',
       header: 'Total',
+      meta: {
+        align: 'right',
+        tooltip:
+          'Total value secured in escrow contracts on Ethereum displayed together with a percentage changed compared to 7D ago.',
+      },
       cell: (ctx) => {
-        const value = ctx.row.original.tvl
-        if (value.breakdown?.total === undefined) {
-          return <NoDataBadge />
-        }
-
+        const value = ctx.row.original.tvs
         return (
           <TotalCell
+            href={`/bridges/projects/${ctx.row.original.slug}#tvs`}
             associatedTokenSymbols={value.associatedTokens}
-            tvlWarnings={value.warnings}
+            tvsWarnings={value.warnings}
             breakdown={value.breakdown}
             change={value.change}
           />
         )
       },
       sortUndefined: 'last',
-      meta: {
-        align: 'right',
-        tooltip:
-          'Total value locked in escrow contracts on Ethereum displayed together with a percentage changed compared to 7D ago.',
-      },
-    },
-  ),
-]
+    }),
+  ])
+}

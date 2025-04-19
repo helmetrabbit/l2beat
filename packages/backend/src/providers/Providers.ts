@@ -1,72 +1,81 @@
-import { Logger, RateLimiter } from '@l2beat/backend-tools'
+import type { Logger } from '@l2beat/backend-tools'
 import {
-  CoingeckoClient,
-  HttpClient2,
-  LoopringClient,
-  RetryHandler,
-  StarknetClient,
+  AvailDaProvider,
+  BalanceProvider,
+  BlockProvider,
+  BlockTimestampProvider,
+  CelestiaDaProvider,
+  CirculatingSupplyProvider,
+  CoingeckoQueryService,
+  DaProvider,
+  EthereumDaProvider,
+  PriceProvider,
+  TotalSupplyProvider,
 } from '@l2beat/shared'
 import { assert } from '@l2beat/shared-pure'
-import { Config } from '../config'
-import { BlockProviders, initBlockProviders } from './BlockProviders'
-import {
-  CirculatingSupplyProviders,
-  initCirculatingSupplyProviders,
-} from './CirculatingSupplyProviders'
-import { PriceProviders, initPriceProviders } from './PriceProviders'
+import type { Config } from '../config'
+import { BlobProviders } from './BlobProviders'
+import { BlockProviders } from './BlockProviders'
+import { type Clients, initClients } from './Clients'
+import { DayProviders } from './DayProviders'
+import { UopsAnalyzers } from './UopsAnalyzers'
 
 export class Providers {
   block: BlockProviders
-  price: PriceProviders | undefined
-  circulatingSupply: CirculatingSupplyProviders | undefined
-  coingeckoClient: CoingeckoClient
-  degateClient: LoopringClient
-  loopringClient: LoopringClient
-  starknetClient: StarknetClient
+  price: PriceProvider
+  uops: UopsAnalyzers
+  day: DayProviders
+  circulatingSupply: CirculatingSupplyProvider
+  blob: BlobProviders | undefined
+  da: DaProvider
+  clients: Clients
+  blockTimestamp: BlockTimestampProvider
+  totalSupply: TotalSupplyProvider
+  balance: BalanceProvider
 
   constructor(
     readonly config: Config,
     readonly logger: Logger,
   ) {
-    const http = new HttpClient2()
-    this.coingeckoClient = new CoingeckoClient({
-      apiKey: config.coingeckoApiKey,
-      http,
-      logger,
-      rateLimiter: RateLimiter.COINGECKO(config.coingeckoApiKey),
-      retryHandler: RetryHandler.RELIABLE_API(logger),
+    this.clients = initClients(config, logger)
+    this.block = new BlockProviders(this.clients.block, this.clients.indexer)
+    this.circulatingSupply = new CirculatingSupplyProvider(
+      new CoingeckoQueryService(
+        this.clients.coingecko,
+        logger.tag({ tag: 'circulatingSupplies' }),
+      ),
+    )
+    this.price = new PriceProvider(
+      new CoingeckoQueryService(
+        this.clients.coingecko,
+        logger.tag({ tag: 'prices' }),
+      ),
+    )
+    this.uops = new UopsAnalyzers(config.chainConfig)
+    this.day = new DayProviders(config.chainConfig, this.clients.starkex)
+    this.blob =
+      config.finality && this.clients.blob
+        ? new BlobProviders(this.clients.blob)
+        : undefined
+    this.da = new DaProvider([
+      ...this.clients.blobscan.map(
+        (c) => new EthereumDaProvider(c.client, c.daLayer),
+      ),
+      ...this.clients.celestia.map(
+        (c) => new CelestiaDaProvider(c.client, c.daLayer),
+      ),
+      ...this.clients.avail.map(
+        (c) => new AvailDaProvider(c.client, c.daLayer),
+      ),
+    ])
+    this.blockTimestamp = new BlockTimestampProvider({
+      indexerClients: this.clients.indexer,
+      blockProviders: this.clients.block.map(
+        (c) => new BlockProvider(c.chain, [c]),
+      ),
     })
-    // TODO: refactor
-    this.degateClient = new LoopringClient({
-      url: 'https://v1-mainnet-backend.degate.com/order-book-api',
-      type: 'degate3',
-      http,
-      logger,
-      rateLimiter: new RateLimiter({ callsPerMinute: 60 }),
-      retryHandler: RetryHandler.RELIABLE_API(logger),
-    })
-    this.loopringClient = new LoopringClient({
-      url: 'https://api3.loopring.io/api/v3',
-      type: 'loopring',
-      http,
-      logger,
-      rateLimiter: new RateLimiter({ callsPerMinute: 60 }),
-      retryHandler: RetryHandler.RELIABLE_API(logger),
-    })
-    this.starknetClient = new StarknetClient({
-      url: 'https://starknet-mainnet.public.blastapi.io',
-      http,
-      logger,
-      rateLimiter: new RateLimiter({ callsPerMinute: 60 }),
-      retryHandler: RetryHandler.RELIABLE_API(logger),
-    })
-    this.block = initBlockProviders(config.chainConfig)
-    this.circulatingSupply = config.tvl
-      ? initCirculatingSupplyProviders(this.coingeckoClient)
-      : undefined
-    this.price = config.tvl
-      ? initPriceProviders(this.coingeckoClient)
-      : undefined
+    this.totalSupply = new TotalSupplyProvider(this.clients.rpcClients, logger)
+    this.balance = new BalanceProvider(this.clients.rpcClients, logger)
   }
 
   getPriceProviders() {
@@ -74,11 +83,8 @@ export class Providers {
     return this.price
   }
 
-  getCirculatingSupplyProviders() {
-    assert(
-      this.circulatingSupply,
-      'Circulating Supply providers unintended access',
-    )
-    return this.circulatingSupply
+  getBlobProviders() {
+    assert(this.blob, 'Blob providers unintended access')
+    return this.blob
   }
 }

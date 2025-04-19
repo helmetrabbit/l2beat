@@ -1,9 +1,9 @@
-import { type WarningWithSentiment } from '@l2beat/config'
+import type { WarningWithSentiment } from '@l2beat/config'
 import { RoundedWarningIcon } from '~/icons/rounded-warning'
 import { cn } from '~/utils/cn'
 import { languageJoin } from '~/utils/language-join'
 import { Square } from '../square'
-import { WarningBar } from '../warning-bar'
+import { WarningBar, sentimentToWarningBarColor } from '../warning-bar'
 import { Breakdown } from './breakdown'
 
 export interface TokenBreakdownProps {
@@ -16,7 +16,8 @@ export interface TokenBreakdownProps {
 
 export interface TokenBreakdownTooltipContentProps extends TokenBreakdownProps {
   associatedTokenSymbols: string[]
-  tvlWarnings: WarningWithSentiment[]
+  gasTokens?: string[]
+  tvsWarnings: WarningWithSentiment[]
 }
 
 export function TokenBreakdown(props: TokenBreakdownProps) {
@@ -45,17 +46,21 @@ export function TokenBreakdownTooltipContent({
   ether,
   stablecoin,
   associatedTokenSymbols,
-  tvlWarnings,
+  tvsWarnings,
+  gasTokens,
 }: TokenBreakdownTooltipContentProps) {
   const other = total - associated - ether - stablecoin
+  const associatedTokensWithGas = associatedTokenSymbols.map((symbol) =>
+    gasTokens?.includes(symbol.toUpperCase()) ? `${symbol} (gas)` : symbol,
+  )
   const values = [
     {
-      title: languageJoin(associatedTokenSymbols) ?? 'Associated',
+      title: languageJoin(associatedTokensWithGas) ?? 'Associated',
       value: associated,
       variant: 'associated' as const,
     },
     {
-      title: 'Ether',
+      title: gasTokens?.includes('ETH') ? 'Ether (gas)' : 'Ether',
       value: ether,
       variant: 'ether' as const,
     },
@@ -67,37 +72,37 @@ export function TokenBreakdownTooltipContent({
     { title: 'Other', value: other, variant: 'other' as const },
   ]
 
-  if (total === 0) {
-    return 'No tokens'
-  }
-
   return (
     <div className="space-y-2">
-      <div>
-        {values.map(
-          (v, i) =>
-            v.value > 0 && (
-              <div
-                key={i}
-                className="flex items-center justify-between gap-x-6"
-              >
-                <span className="flex items-center gap-1">
-                  <Square variant={v.variant} size="small" />
-                  <span>{v.title}</span>
-                </span>
-                <span className="font-medium">
-                  {((v.value / total) * 100).toFixed(2)}%
-                </span>
-              </div>
-            ),
-        )}
-      </div>
-      {tvlWarnings?.map((warning, i) => (
+      {total === 0 ? (
+        <span>No tokens</span>
+      ) : (
+        <div>
+          {values.map(
+            (v, i) =>
+              v.value > 0 && (
+                <div
+                  key={i}
+                  className="flex items-center justify-between gap-x-6"
+                >
+                  <span className="flex items-center gap-1">
+                    <Square variant={v.variant} size="small" />
+                    <span>{v.title}</span>
+                  </span>
+                  <span className="font-medium">
+                    {((v.value / total) * 100).toFixed(2)}%
+                  </span>
+                </div>
+              ),
+          )}
+        </div>
+      )}
+      {tvsWarnings?.map((warning, i) => (
         <WarningBar
-          key={`tvl-warning-${i}`}
+          key={`tvs-warning-${i}`}
           icon={RoundedWarningIcon}
-          text={warning.content}
-          color={warning.sentiment === 'warning' ? 'yellow' : 'red'}
+          text={warning.value}
+          color={sentimentToWarningBarColor(warning.sentiment)}
           // Cell itself is a href.
           // Markdown might contain links - nesting them in a tooltip
           // breaks semantics apart causing significant layout shifts.

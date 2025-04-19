@@ -1,9 +1,11 @@
-import { PoolConfig } from 'pg'
+import type { PoolConfig } from 'pg'
 import { ActivityRepository } from './activity/repository'
 import { CurrentPriceRepository } from './da-beat/current-price/repository'
+import { DataAvailabilityRepository } from './da-beat/data-availability/repository'
 import { StakeRepository } from './da-beat/stake/repository'
 import { DiscoveryCacheRepository } from './discovery/discovery-cache/repository'
 import { FlatSourcesRepository } from './discovery/flat-sources/repository'
+import { UpdateMessageRepository } from './discovery/update-message/repository'
 import { UpdateMonitorRepository } from './discovery/update-monitor/repository'
 import { UpdateNotifierRepository } from './discovery/update-notifier/repository'
 import { DatabaseClient } from './kysely'
@@ -20,6 +22,11 @@ import { BlockTimestampRepository } from './tvl/block-timestamp/repository'
 import { PriceRepository } from './tvl/price/repository'
 import { TvlCleanerRepository } from './tvl/tvl-cleaner/repository'
 import { ValueRepository } from './tvl/value/repository'
+import { TvsAmountRepository } from './tvs/amount/repository'
+import { TvsBlockTimestampRepository } from './tvs/block-timestamp/repository'
+import { TvsPriceRepository } from './tvs/price/repository'
+import { ProjectValueRepository } from './tvs/project-value/repository'
+import { TokenValueRepository } from './tvs/token-value/repository'
 import { IndexerConfigurationRepository } from './uif/indexer-configuration/repository'
 import { IndexerStateRepository } from './uif/indexer-state/repository'
 
@@ -38,12 +45,14 @@ export function createDatabase(config?: PoolConfig) {
     // #region DA BEAT
     currentPrice: new CurrentPriceRepository(db),
     stake: new StakeRepository(db),
+    dataAvailability: new DataAvailabilityRepository(db),
     // #endregion
 
     // #region Discovery
     discoveryCache: new DiscoveryCacheRepository(db),
     updateMonitor: new UpdateMonitorRepository(db),
     updateNotifier: new UpdateNotifierRepository(db),
+    updateMessage: new UpdateMessageRepository(db),
     flatSources: new FlatSourcesRepository(db),
     // #endregion
 
@@ -69,6 +78,14 @@ export function createDatabase(config?: PoolConfig) {
     l2CostPrice: new L2CostPriceRepository(db),
     liveness: new LivenessRepository(db),
     verifierStatus: new VerifierStatusRepository(db),
+    // #endregion
+    //
+    // #region Tvs
+    tvsPrice: new TvsPriceRepository(db),
+    tvsAmount: new TvsAmountRepository(db),
+    tvsBlockTimestamp: new TvsBlockTimestampRepository(db),
+    tvsTokenValue: new TokenValueRepository(db),
+    tvsProjectValue: new ProjectValueRepository(db),
     // #endregion
   }
 }

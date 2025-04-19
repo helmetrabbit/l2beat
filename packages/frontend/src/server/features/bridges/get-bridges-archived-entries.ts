@@ -1,56 +1,45 @@
-import { bridges } from '@l2beat/config'
-import { getUnderReviewStatus } from '~/utils/project/under-review'
+import type { BridgeCategory, TableReadyValue } from '@l2beat/config'
+import type { TabbedBridgeEntries } from '~/app/(side-nav)/bridges/_utils/group-by-bridge-tabs'
+import { groupByBridgeTabs } from '~/app/(side-nav)/bridges/_utils/group-by-bridge-tabs'
+import { ps } from '~/server/projects'
 import { getProjectsChangeReport } from '../projects-change-report/get-projects-change-report'
-import { get7dTokenBreakdown } from '../scaling/tvl/utils/get-7d-token-breakdown'
-import { orderByTvl } from '../scaling/tvl/utils/order-by-tvl'
-import { isAnySectionUnderReview } from '../scaling/utils/is-any-section-under-review'
-import { getProjectsVerificationStatuses } from '../verification-status/get-projects-verification-statuses'
+import { get7dTvsBreakdown } from '../scaling/tvs/get-7d-tvs-breakdown'
+import { compareTvs } from '../scaling/tvs/utils/compare-tvs'
+import type { CommonBridgesEntry } from './get-common-bridges-entry'
+import { getCommonBridgesEntry } from './get-common-bridges-entry'
 
-export type BridgesArchivedEntry = Awaited<
-  ReturnType<typeof getBridgesArchivedEntries>
->[number]
-export async function getBridgesArchivedEntries() {
-  const archivedBridges = bridges.filter((bridge) => bridge.isArchived)
-  const [tvl7dBreakdown, projectsChangeReport, projectsVerificationStatuses] =
-    await Promise.all([
-      get7dTokenBreakdown({ type: 'bridge' }),
-      getProjectsChangeReport(),
-      getProjectsVerificationStatuses(),
-    ])
+export interface BridgesArchivedEntry extends CommonBridgesEntry {
+  type: BridgeCategory
+  validatedBy: TableReadyValue
+  totalTvs: number | undefined
+  tvsOrder: number
+}
 
-  const entries = archivedBridges.map((bridge) => {
-    const tvl = tvl7dBreakdown.projects[bridge.id.toString()]
-    const isVerified = !!projectsVerificationStatuses[bridge.id.toString()]
-    const hasImplementationChanged =
-      projectsChangeReport.hasImplementationChanged(bridge.id.toString())
-    const hasHighSeverityFieldChanged =
-      projectsChangeReport.hasHighSeverityFieldChanged(bridge.id.toString())
-    return {
-      id: bridge.id,
-      slug: bridge.display.slug,
-      href: `/bridges/projects/${bridge.display.slug}`,
-      name: bridge.display.name,
-      shortName: bridge.display.shortName,
-      isVerified,
-      underReviewStatus: getUnderReviewStatus({
-        isUnderReview: isAnySectionUnderReview(bridge),
-        hasImplementationChanged,
-        hasHighSeverityFieldChanged,
-      }),
-      warning: bridge.display.warning,
-      validatedBy: bridge.riskView?.validatedBy,
-      category: bridge.display.category,
-      type: bridge.type,
-      totalTvl: tvl?.breakdown.total,
-    }
-  })
+export async function getBridgesArchivedEntries(): Promise<
+  TabbedBridgeEntries<BridgesArchivedEntry>
+> {
+  const [tvs7dBreakdown, projectsChangeReport, projects] = await Promise.all([
+    get7dTvsBreakdown({ type: 'bridge' }),
+    getProjectsChangeReport(),
+    ps.getProjects({
+      select: ['statuses', 'bridgeInfo', 'bridgeRisks'],
+      where: ['isBridge', 'archivedAt'],
+    }),
+  ])
 
-  const remappedForOrdering = Object.fromEntries(
-    Object.entries(tvl7dBreakdown.projects).map(([k, v]) => [
-      k,
-      v.breakdown.total,
-    ]),
-  )
+  const entries = projects
+    .map((project) => {
+      const tvs = tvs7dBreakdown.projects[project.id.toString()]
+      const changes = projectsChangeReport.getChanges(project.id)
+      return {
+        ...getCommonBridgesEntry({ project, changes }),
+        type: project.bridgeInfo.category,
+        validatedBy: project.bridgeRisks.validatedBy,
+        totalTvs: tvs?.breakdown.total,
+        tvsOrder: tvs?.breakdown.total ?? -1,
+      }
+    })
+    .sort(compareTvs)
 
-  return orderByTvl(entries, remappedForOrdering)
+  return groupByBridgeTabs(entries)
 }

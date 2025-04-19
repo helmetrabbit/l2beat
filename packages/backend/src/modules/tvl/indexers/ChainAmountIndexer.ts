@@ -1,12 +1,12 @@
-import { INDEXER_NAMES } from '@l2beat/config'
+import { INDEXER_NAMES } from '@l2beat/backend-shared'
 import { assert, UnixTime } from '@l2beat/shared-pure'
 import { Indexer } from '@l2beat/uif'
 import { ManagedMultiIndexer } from '../../../tools/uif/multi/ManagedMultiIndexer'
-import {
+import type {
   Configuration,
   RemovalConfiguration,
 } from '../../../tools/uif/multi/types'
-import { ChainAmountConfig, ChainAmountIndexerDeps } from './types'
+import type { ChainAmountConfig, ChainAmountIndexerDeps } from './types'
 
 export class ChainAmountIndexer extends ManagedMultiIndexer<ChainAmountConfig> {
   constructor(private readonly $: ChainAmountIndexerDeps) {
@@ -27,11 +27,11 @@ export class ChainAmountIndexer extends ManagedMultiIndexer<ChainAmountConfig> {
     configurations: Configuration<ChainAmountConfig>[],
   ) {
     const timestamp = this.$.syncOptimizer.getTimestampToSync(from)
-    if (timestamp.toNumber() > to) {
+    if (timestamp > to) {
       this.logger.info('Skipping update due to sync optimization', {
         from,
         to,
-        optimizedTimestamp: timestamp.toNumber(),
+        optimizedTimestamp: timestamp,
       })
       return () => Promise.resolve(to)
     }
@@ -45,7 +45,7 @@ export class ChainAmountIndexer extends ManagedMultiIndexer<ChainAmountConfig> {
     )
 
     this.logger.info('Fetched amounts for timestamp', {
-      timestamp: timestamp.toNumber(),
+      timestamp: timestamp,
       blockNumber,
       escrows: amounts.filter((a) => a.type === 'escrow').length,
       totalSupplies: amounts.filter((a) => a.type === 'totalSupply').length,
@@ -56,13 +56,13 @@ export class ChainAmountIndexer extends ManagedMultiIndexer<ChainAmountConfig> {
     return async () => {
       await this.$.db.amount.insertMany(nonZeroAmounts)
       this.logger.info('Saved amounts for timestamp into DB', {
-        timestamp: timestamp.toNumber(),
+        timestamp: timestamp,
         escrows: nonZeroAmounts.filter((a) => a.type === 'escrow').length,
         totalSupplies: nonZeroAmounts.filter((a) => a.type === 'totalSupply')
           .length,
       })
 
-      return timestamp.toNumber()
+      return timestamp
     }
   }
 
@@ -72,10 +72,7 @@ export class ChainAmountIndexer extends ManagedMultiIndexer<ChainAmountConfig> {
         this.$.chain,
         timestamp,
       )
-    assert(
-      blockNumber,
-      `Block number not found for timestamp: ${timestamp.toNumber()}`,
-    )
+    assert(blockNumber, `Block number not found for timestamp: ${timestamp}`)
     return blockNumber
   }
 
@@ -83,8 +80,8 @@ export class ChainAmountIndexer extends ManagedMultiIndexer<ChainAmountConfig> {
     for (const configuration of configurations) {
       const deletedRecords = await this.$.db.amount.deleteByConfigInTimeRange(
         configuration.id,
-        new UnixTime(configuration.from),
-        new UnixTime(configuration.to),
+        UnixTime(configuration.from),
+        UnixTime(configuration.to),
       )
 
       if (deletedRecords > 0) {

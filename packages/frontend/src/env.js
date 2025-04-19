@@ -27,12 +27,13 @@ export const env = createEnv({
     NODE_ENV: z
       .enum(['development', 'test', 'production'])
       .default('development'),
+    CRON_SECRET: z.string().optional(),
     VERCEL_GIT_COMMIT_REF: z.string().optional(),
     VERCEL_GIT_COMMIT_SHA: z.string().default('local'),
     VERCEL_URL: z.string().optional(),
     VERCEL_ENV: z.enum(['production', 'preview', 'development']).optional(),
     EXCLUDED_ACTIVITY_PROJECTS: stringArray.optional(),
-    EXCLUDED_TVL_PROJECTS: stringArray.optional(),
+    EXCLUDED_TVS_PROJECTS: stringArray.optional(),
   },
 
   /**
@@ -40,15 +41,11 @@ export const env = createEnv({
    */
   client: {
     NEXT_PUBLIC_FEATURE_FLAG_STAGE_SORTING: featureFlag.default('false'),
-    NEXT_PUBLIC_FEATURE_FLAG_OTHER_PROJECTS: featureFlag.default('false'),
-    NEXT_PUBLIC_FEATURE_FLAG_INTERNAL_TOOLS: featureFlag.default(
-      process.env.NODE_ENV === 'development' ? 'true' : 'false',
-    ),
     NEXT_PUBLIC_GITCOIN_ROUND_LIVE: featureFlag.default('false'),
     NEXT_PUBLIC_PLAUSIBLE_DOMAIN: z.string().default('localhost'),
     NEXT_PUBLIC_PLAUSIBLE_ENABLED: coerceBoolean.optional(),
     NEXT_PUBLIC_SHOW_HIRING_BADGE: featureFlag.default('false'),
-    NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: z.string().optional(),
+    NEXT_PUBLIC_ECOSYSTEMS: coerceBoolean.default('false'),
   },
 
   /**
@@ -61,25 +58,21 @@ export const env = createEnv({
     ETHEREUM_RPC_URL: process.env.ETHEREUM_RPC_URL,
     MOCK: process.env.MOCK,
     NODE_ENV: process.env.NODE_ENV,
+    CRON_SECRET: process.env.CRON_SECRET,
     VERCEL_GIT_COMMIT_REF: process.env.VERCEL_GIT_COMMIT_REF,
     VERCEL_GIT_COMMIT_SHA: process.env.VERCEL_GIT_COMMIT_SHA,
     VERCEL_ENV: process.env.VERCEL_ENV,
     VERCEL_URL: process.env.VERCEL_URL,
     EXCLUDED_ACTIVITY_PROJECTS: process.env.EXCLUDED_ACTIVITY_PROJECTS,
-    EXCLUDED_TVL_PROJECTS: process.env.EXCLUDED_TVL_PROJECTS,
+    EXCLUDED_TVS_PROJECTS: process.env.EXCLUDED_TVS_PROJECTS,
     // Client
     NEXT_PUBLIC_FEATURE_FLAG_STAGE_SORTING:
       process.env.NEXT_PUBLIC_FEATURE_FLAG_STAGE_SORTING,
-    NEXT_PUBLIC_FEATURE_FLAG_OTHER_PROJECTS:
-      process.env.NEXT_PUBLIC_FEATURE_FLAG_OTHER_PROJECTS,
-    NEXT_PUBLIC_FEATURE_FLAG_INTERNAL_TOOLS:
-      process.env.NEXT_PUBLIC_FEATURE_FLAG_INTERNAL_TOOLS,
     NEXT_PUBLIC_GITCOIN_ROUND_LIVE: process.env.FEATURE_FLAG_GITCOIN_OPTION,
     NEXT_PUBLIC_PLAUSIBLE_DOMAIN: process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN,
     NEXT_PUBLIC_PLAUSIBLE_ENABLED: process.env.NEXT_PUBLIC_PLAUSIBLE_ENABLED,
     NEXT_PUBLIC_SHOW_HIRING_BADGE: process.env.FEATURE_FLAG_HIRING,
-    NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID:
-      process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID,
+    NEXT_PUBLIC_ECOSYSTEMS: process.env.NEXT_PUBLIC_ECOSYSTEMS,
   },
 
   /**

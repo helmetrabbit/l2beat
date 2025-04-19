@@ -1,17 +1,23 @@
-import { ConfigReader, getChainShortName } from '@l2beat/discovery'
 import {
-  ContractParameters,
-  DiscoveryOutput,
-  get$Implementations,
-} from '@l2beat/discovery-types'
-import { DiscoveryContract } from '@l2beat/discovery/dist/discovery/config/RawDiscoveryConfig'
+  type ConfigReader,
+  type ConfigRegistry,
+  type DiscoveryOutput,
+  type EntryParameters,
+  type TemplateService,
+  getChainShortName,
+  makeEntryColorConfig,
+  makeEntryStructureConfig,
+} from '@l2beat/discovery'
+import { type ContractConfig, get$Implementations } from '@l2beat/discovery'
+import type { ColorContract } from '@l2beat/discovery/dist/discovery/config/ColorConfig'
 import { EthereumAddress } from '@l2beat/shared-pure'
 import { utils } from 'ethers'
+import { getContractName } from './getContractName'
 import { getContractType } from './getContractType'
 import { getMeta } from './getMeta'
 import { parseFieldValue } from './parseFieldValue'
 import { toAddress } from './toAddress'
-import {
+import type {
   AddressFieldValue,
   ApiAbiEntry,
   ApiAddressEntry,
@@ -23,48 +29,91 @@ import {
   FieldValue,
 } from './types'
 
-export function getProject(configReader: ConfigReader, project: string) {
-  const chains = configReader.readAllChainsForProject(project)
-  const data = chains.map((chain) => ({
-    chain,
-    config: configReader.readConfig(project, chain, { skipTemplates: false }),
-    discovery: configReader.readDiscovery(project, chain),
-  }))
+interface ProjectData {
+  chain: string
+  config: ConfigRegistry
+  discovery: DiscoveryOutput
+}
 
-  const response: ApiProjectResponse = { chains: [] }
+function readProject(
+  chain: string,
+  project: string,
+  configReader: ConfigReader,
+): ProjectData[] {
+  const discovery = configReader.readDiscovery(project, chain)
+  const sharedModules = discovery.sharedModules ?? []
+
+  return [
+    {
+      chain,
+      config: configReader.readConfig(project, chain),
+      discovery,
+    },
+    ...sharedModules.flatMap((sharedModule) =>
+      readProject(chain, sharedModule, configReader),
+    ),
+  ]
+}
+
+export function getProject(
+  configReader: ConfigReader,
+  templateService: TemplateService,
+  project: string,
+): ApiProjectResponse {
+  const chains = configReader.readAllChainsForProject(project)
+  const data = chains.flatMap((chain) =>
+    readProject(chain, project, configReader),
+  )
+
+  const response: ApiProjectResponse = { entries: [] }
   for (const { chain, config, discovery } of data) {
-    const meta = getMeta(discovery)
-    const contracts = discovery.contracts
-      .map((contract) => {
-        const overrides =
-          config.overrides.get(contract.address) ??
-          config.overrides.get(config.names[contract.address] ?? '')
-        const template = contract.template
-          ? configReader.templateService.loadContractTemplate(contract.template)
-          : undefined
+    const meta = getMeta([discovery])
+    const contracts = discovery.entries
+      .filter((e) => e.type === 'Contract')
+      .map((entry) => {
+        const contractConfig = makeEntryStructureConfig(
+          config.structure,
+          entry.address,
+        )
+
+        if (entry.template !== undefined) {
+          const templateValues = templateService.loadContractTemplate(
+            entry.template,
+          )
+          contractConfig.pushValues(templateValues)
+        }
+
+        const contractColorConfig = makeEntryColorConfig(
+          config.color,
+          entry.address,
+          templateService.loadContractTemplateColor(entry.template),
+        )
+
         return contractFromDiscovery(
           chain,
           meta,
-          contract,
-          overrides,
-          template,
+          entry,
+          contractConfig,
+          contractColorConfig,
           discovery.abis,
         )
       })
       .sort(orderAddressEntries)
-    const initialAddresses = config.initialAddresses.map(
+    const initialAddresses = config.structure.initialAddresses.map(
       (address) => `${getChainShortName(chain)}:${address}`,
     )
 
     const chainInfo = {
-      name: chain,
+      project: config.name,
+      chain: chain,
       initialContracts: contracts.filter((x) =>
         initialAddresses.includes(x.address),
       ),
       discoveredContracts: contracts.filter(
         (x) => !initialAddresses.includes(x.address),
       ),
-      eoas: discovery.eoas
+      eoas: discovery.entries
+        .filter((e) => e.type === 'EOA')
         .filter((x) => x.address !== EthereumAddress.ZERO)
         .map(
           (x): ApiAddressEntry => ({
@@ -76,10 +125,11 @@ export function getProject(configReader: ConfigReader, project: string) {
           }),
         )
         .sort(orderAddressEntries),
-    }
-    response.chains.push(chainInfo)
+      blockNumber: discovery.blockNumber,
+    } satisfies ApiProjectChain
+    response.entries.push(chainInfo)
   }
-  populateReferencedBy(response.chains)
+  populateReferencedBy(response.entries)
   return response
 }
 
@@ -99,24 +149,20 @@ function orderAddressEntries(a: ApiAddressEntry, b: ApiAddressEntry) {
 function contractFromDiscovery(
   chain: string,
   meta: Record<string, { name?: string; type: ApiAddressType }>,
-  contract: ContractParameters,
-  overrides: DiscoveryContract | undefined,
-  template: DiscoveryContract | undefined,
+  contract: EntryParameters,
+  contractConfig: ContractConfig,
+  contractColorConfig: ColorContract,
   abis: DiscoveryOutput['abis'],
 ): ApiProjectContract {
   const getFieldInfo = (name: string): Omit<Field, 'name' | 'value'> => {
-    const oField = overrides?.fields?.[name]
-    const tField = template?.fields?.[name]
+    const field = contractConfig.fields[name]
+    const fieldColor = contractColorConfig.fields[name]
     return {
-      description: oField?.description ?? tField?.description,
-      handler: oField?.handler ?? tField?.handler,
-      ignoreInWatchMode:
-        overrides?.ignoreInWatchMode?.includes(name) ||
-        template?.ignoreInWatchMode?.includes(name),
-      ignoreRelatives:
-        overrides?.ignoreRelatives?.includes(name) ||
-        template?.ignoreRelatives?.includes(name),
-      severity: oField?.severity ?? tField?.severity,
+      description: fieldColor?.description,
+      handler: field?.handler,
+      ignoreInWatchMode: contractConfig.ignoreInWatchMode?.includes(name),
+      ignoreRelatives: contractConfig.ignoreRelatives?.includes(name),
+      severity: fieldColor?.severity,
     }
   }
 
@@ -141,7 +187,7 @@ function contractFromDiscovery(
   const implementations = get$Implementations(contract.values)
 
   return {
-    name: contract.name || undefined,
+    name: getContractName(contract),
     type: getContractType(contract),
     template: contract.template,
     description: contract.description,
@@ -152,6 +198,7 @@ function contractFromDiscovery(
       address: toAddress(chain, address),
       entries: (abis[address] ?? []).map((e) => abiEntry(e)),
     })),
+    sources: [],
   }
 }
 

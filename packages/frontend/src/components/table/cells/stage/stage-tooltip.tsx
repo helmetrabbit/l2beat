@@ -1,36 +1,79 @@
-import { type Stage, type StageConfig } from '@l2beat/config'
-import { StageBadge } from '~/components/badge/stage-badge'
+import type { ProjectScalingStage, Stage } from '@l2beat/config'
+import {
+  StageBadge,
+  getStageTextClassname,
+} from '~/components/badge/stage-badge'
 import { Callout } from '~/components/callout'
+import { HorizontalSeparator } from '~/components/core/horizontal-separator'
+import { StageOneRequirementsChangeTooltipContent } from '~/components/countdowns/stage-one-requirements-change/stage-one-requirements-change-tooltip-content'
 import { WarningBar } from '~/components/warning-bar'
+import { featureFlags } from '~/consts/feature-flags'
 import { InfoIcon } from '~/icons/info'
 import { MissingIcon } from '~/icons/missing'
 import { RoundedWarningIcon } from '~/icons/rounded-warning'
 import { UnderReviewIcon } from '~/icons/under-review'
+import { cn } from '~/utils/cn'
 
 export interface StageTooltipProps {
-  stageConfig: StageConfig
+  stageConfig: ProjectScalingStage
+  isAppchain: boolean
 }
 
-export function StageTooltip({ stageConfig }: StageTooltipProps) {
+export function StageTooltip({ stageConfig, isAppchain }: StageTooltipProps) {
   if (stageConfig.stage === 'NotApplicable') return null
+  const missing =
+    stageConfig.stage !== 'UnderReview'
+      ? stageConfig.missing?.principle &&
+        featureFlags.stageOneRequirementsChanged()
+        ? [stageConfig.missing.principle]
+        : stageConfig.missing?.requirements
+      : undefined
 
   return (
-    <div className="flex max-w-[300px] flex-col gap-4 py-1">
-      <span>
-        <StageBadge stage={stageConfig.stage} className="font-medium" />
-        <span className="ml-2 inline-block font-medium">
+    <div className="flex flex-col py-1">
+      <div
+        className={cn('flex gap-2', isAppchain ? 'flex-col' : 'items-baseline')}
+      >
+        <StageBadge
+          stage={stageConfig.stage}
+          isAppchain={isAppchain}
+          className="font-medium"
+          inline
+        />
+        <div className="inline-block font-bold">
           {getStageName(stageConfig.stage)}
-        </span>
-      </span>
-      {stageConfig.stage === 'UnderReview' ? (
-        <>
+        </div>
+      </div>
+      {stageConfig.stage !== 'UnderReview' &&
+      !!stageConfig.additionalConsiderations ? (
+        isAppchain ? (
+          <div className="mt-2">
+            <span
+              className={cn(
+                'font-medium',
+                getStageTextClassname(stageConfig.stage),
+              )}
+            >
+              Appchain
+            </span>
+            : {stageConfig.additionalConsiderations.short}
+          </div>
+        ) : (
+          stageConfig.additionalConsiderations.short
+        )
+      ) : null}
+      <HorizontalSeparator className="my-3" />
+
+      {stageConfig.stage === 'UnderReview' && (
+        <p>
           Projects under review might present uncompleted information & data.
           <br />
           L2BEAT Team is working to research & validate content before
           publishing.
-        </>
-      ) : (
-        <>
+        </p>
+      )}
+      {stageConfig.stage !== 'UnderReview' && !stageConfig.downgradePending && (
+        <div>
           {stageConfig.message && (
             <WarningBar
               color="yellow"
@@ -39,6 +82,7 @@ export function StageTooltip({ stageConfig }: StageTooltipProps) {
                   ? RoundedWarningIcon
                   : UnderReviewIcon
               }
+              className="mb-4"
               text={stageConfig.message.text}
               ignoreMarkdown
             />
@@ -54,7 +98,7 @@ export function StageTooltip({ stageConfig }: StageTooltipProps) {
                 </span>
               </span>
               <ul className="list-none space-y-2">
-                {stageConfig.missing.requirements.map((requirement, i) => (
+                {missing?.map((requirement, i) => (
                   <li className="flex gap-1.5" key={i}>
                     <MissingIcon className="relative top-0.5 inline-block shrink-0" />
                     {requirement}
@@ -63,13 +107,22 @@ export function StageTooltip({ stageConfig }: StageTooltipProps) {
               </ul>
             </div>
           )}
-        </>
+        </div>
+      )}
+
+      {stageConfig.stage !== 'UnderReview' && stageConfig.downgradePending && (
+        <StageOneRequirementsChangeTooltipContent
+          downgradePending={stageConfig.downgradePending}
+        />
       )}
       <Callout
         color="blue"
         body="Please mind, stages do not reflect rollup security"
-        icon={<InfoIcon className="size-4" variant="blue" />}
-        className="p-4 font-medium"
+        icon={<InfoIcon className="-mt-px size-4 fill-blue-600" />}
+        className={cn(
+          '!gap-1 p-3 text-[13px] font-medium',
+          stageConfig.stage !== 'Stage 2' && 'mt-4',
+        )}
       />
     </div>
   )
@@ -93,9 +146,9 @@ function getStageName(stage: Stage | 'UnderReview') {
 function getColorClassName(stage: Stage) {
   switch (stage) {
     case 'Stage 1':
-      return 'text-yellow-200'
+      return 'text-warning'
     case 'Stage 2':
-      return 'text-green-400'
+      return 'text-positive'
     default:
       return undefined
   }

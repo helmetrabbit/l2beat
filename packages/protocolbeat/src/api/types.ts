@@ -4,16 +4,23 @@ export type ApiProjectsResponse = ApiProjectEntry[]
 
 export interface ApiProjectEntry {
   name: string
+  addresses: string[]
+  contractNames: string[]
   chains: string[]
 }
 
 export interface ApiProjectResponse {
-  chains: ApiProjectChain[]
+  entries: ApiProjectChain[]
 }
 
 export interface ApiPreviewResponse {
-  permissionsPerChain: { chain: string; permissions: ApiPreviewPermission[] }[]
+  permissionsPerChain: { chain: string; permissions: ApiPreviewPermissions }[]
   contractsPerChain: { chain: string; contracts: ApiPreviewContract[] }[]
+}
+
+export interface ApiPreviewPermissions {
+  roles: ApiPreviewPermission[]
+  actors: ApiPreviewPermission[]
 }
 
 export interface ApiPreviewPermission {
@@ -27,13 +34,16 @@ export interface ApiPreviewContract {
   addresses: AddressFieldValue[]
   name: string
   description: string
+  upgradableBy: UpgradeabilityActor[] | undefined
 }
 
 export interface ApiProjectChain {
-  name: string
+  project: string
+  chain: string
   initialContracts: ApiProjectContract[]
   discoveredContracts: ApiProjectContract[]
   eoas: ApiAddressEntry[]
+  blockNumber: number
 }
 
 export type ApiAddressType =
@@ -126,6 +136,7 @@ export interface ApiProjectContract extends ApiAddressEntry {
   template?: string
   fields: Field[]
   abis: ApiAbi[]
+  sources: { name: string; code: string }[]
 }
 
 export interface ApiAbi {
@@ -140,5 +151,24 @@ export interface ApiAbiEntry {
 }
 
 export interface ApiCodeResponse {
+  entryName: string | undefined
   sources: { name: string; code: string }[]
+}
+
+export interface ApiCodeSearchResponse {
+  matches: {
+    name: string | undefined
+    address: string
+    codeLocation: {
+      line: string
+      fileName: string
+      index: number
+      offset: number
+    }[]
+  }[]
+}
+
+export interface UpgradeabilityActor {
+  name: string
+  delay: string
 }

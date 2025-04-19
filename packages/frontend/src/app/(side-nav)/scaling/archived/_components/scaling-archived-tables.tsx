@@ -1,5 +1,7 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+import type { TabbedScalingEntries } from '~/app/(side-nav)/scaling/_utils/group-by-scaling-tabs'
 import { CountBadge } from '~/components/badge/count-badge'
 import {
   DirectoryTabs,
@@ -7,61 +9,92 @@ import {
   DirectoryTabsList,
   DirectoryTabsTrigger,
 } from '~/components/core/directory-tabs'
-import { type ScalingArchivedEntry } from '~/server/features/scaling/archived/get-scaling-archived-entries'
-import { type CategorisedScalingEntries } from '~/utils/group-by-main-categories'
-import { useScalingFilter } from '../../_components/scaling-filter-context'
-import { ScalingUpcomingAndArchivedFilters } from '../../_components/scaling-upcoming-and-archived-filters'
+import { useRecategorisationPreviewContext } from '~/components/recategorisation-preview/recategorisation-preview-provider'
+import {
+  OthersInfo,
+  RollupsInfo,
+  ValidiumsAndOptimiumsInfo,
+} from '~/components/scaling-tabs-info'
+import { TableFilters } from '~/components/table/filters/table-filters'
+import { useFilterEntries } from '~/components/table/filters/use-filter-entries'
+import { TableSortingProvider } from '~/components/table/sorting/table-sorting-context'
+import type { ScalingArchivedEntry } from '~/server/features/scaling/archived/get-scaling-archived-entries'
+import { compareStageAndTvs } from '~/server/features/scaling/utils/compare-stage-and-tvs'
+import { getRecategorisedEntries } from '../../_utils/get-recategorised-entries'
 import { ScalingArchivedTable } from './table/scaling-archived-table'
 
-export function ScalingArchivedTables({
-  entries,
-}: { entries: CategorisedScalingEntries<ScalingArchivedEntry> }) {
-  const includeFilters = useScalingFilter()
+export function ScalingArchivedTables(
+  props: TabbedScalingEntries<ScalingArchivedEntry>,
+) {
+  const filterEntries = useFilterEntries()
+  const [tab, setTab] = useState('rollups')
+  const { checked } = useRecategorisationPreviewContext()
 
   const filteredEntries = {
-    rollups: entries.rollups.filter(includeFilters),
-    validiumsAndOptimiums: entries.validiumsAndOptimiums.filter(includeFilters),
-    others: entries.others?.filter(includeFilters) ?? [],
+    rollups: props.rollups.filter(filterEntries),
+    validiumsAndOptimiums: props.validiumsAndOptimiums.filter(filterEntries),
+    others: props.others.filter(filterEntries),
   }
+
+  const entries = checked
+    ? getRecategorisedEntries(filteredEntries, compareStageAndTvs)
+    : filteredEntries
+
+  const initialSort = {
+    id: 'total',
+    desc: true,
+  }
+
+  useEffect(() => {
+    if (!checked && tab === 'others' && entries.others.length === 0) {
+      setTab('rollups')
+    }
+  }, [checked, entries.others, tab])
+
+  const showOthers = checked || entries.others.length > 0
   return (
     <>
-      <ScalingUpcomingAndArchivedFilters
-        items={[
-          ...filteredEntries.rollups,
-          ...filteredEntries.validiumsAndOptimiums,
-          ...filteredEntries.others,
+      <TableFilters
+        entries={[
+          ...props.rollups,
+          ...props.validiumsAndOptimiums,
+          ...props.others,
         ]}
-        className="max-md:ml-4 max-md:mt-4"
       />
-      <DirectoryTabs defaultValue="rollups">
+      <DirectoryTabs value={tab} onValueChange={setTab}>
         <DirectoryTabsList>
           <DirectoryTabsTrigger value="rollups">
-            Rollups <CountBadge>{filteredEntries.rollups.length}</CountBadge>
+            Rollups <CountBadge>{entries.rollups.length}</CountBadge>
           </DirectoryTabsTrigger>
-          <DirectoryTabsTrigger value="validiums-and-optimiums">
+          <DirectoryTabsTrigger value="validiumsAndOptimiums">
             Validiums & Optimiums{' '}
-            <CountBadge>
-              {filteredEntries.validiumsAndOptimiums.length}
-            </CountBadge>
+            <CountBadge>{entries.validiumsAndOptimiums.length}</CountBadge>
           </DirectoryTabsTrigger>
-          {filteredEntries.others.length > 0 && (
+          {showOthers && (
             <DirectoryTabsTrigger value="others">
-              Others <CountBadge>{filteredEntries.others.length}</CountBadge>
+              Others <CountBadge>{entries.others.length}</CountBadge>
             </DirectoryTabsTrigger>
           )}
         </DirectoryTabsList>
-        <DirectoryTabsContent value="rollups">
-          <ScalingArchivedTable entries={filteredEntries.rollups} />
-        </DirectoryTabsContent>
-        <DirectoryTabsContent value="validiums-and-optimiums">
-          <ScalingArchivedTable
-            entries={filteredEntries.validiumsAndOptimiums}
-          />
-        </DirectoryTabsContent>
-        {filteredEntries.others.length > 0 && (
-          <DirectoryTabsContent value="others">
-            <ScalingArchivedTable entries={filteredEntries.others} />
+        <TableSortingProvider initialSort={initialSort}>
+          <DirectoryTabsContent value="rollups">
+            <RollupsInfo />
+            <ScalingArchivedTable entries={entries.rollups} />
           </DirectoryTabsContent>
+        </TableSortingProvider>
+        <TableSortingProvider initialSort={initialSort}>
+          <DirectoryTabsContent value="validiumsAndOptimiums">
+            <ValidiumsAndOptimiumsInfo />
+            <ScalingArchivedTable entries={entries.validiumsAndOptimiums} />
+          </DirectoryTabsContent>
+        </TableSortingProvider>
+        {showOthers && (
+          <TableSortingProvider initialSort={initialSort}>
+            <DirectoryTabsContent value="others">
+              <OthersInfo />
+              <ScalingArchivedTable entries={entries.others} />
+            </DirectoryTabsContent>
+          </TableSortingProvider>
         )}
       </DirectoryTabs>
     </>

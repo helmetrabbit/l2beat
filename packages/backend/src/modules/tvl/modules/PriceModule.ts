@@ -1,10 +1,13 @@
-import { createPriceId } from '@l2beat/config'
-import { CoingeckoId, CoingeckoPriceConfigEntry } from '@l2beat/shared-pure'
+import { createPriceId } from '@l2beat/backend-shared'
+import {
+  CoingeckoId,
+  type CoingeckoPriceConfigEntry,
+} from '@l2beat/shared-pure'
 import { groupBy } from 'lodash'
-import { TvlConfig } from '../../../config/Config'
+import type { TvlConfig } from '../../../config/Config'
 import { DescendantIndexer } from '../indexers/DescendantIndexer'
 import { PriceIndexer } from '../indexers/PriceIndexer'
-import { TvlDependencies } from './TvlDependencies'
+import type { TvlDependencies } from './TvlDependencies'
 
 interface PriceModule {
   start: () => Promise<void> | void
@@ -30,10 +33,10 @@ export function initPriceModule(
 }
 
 function createPriceIndexers(config: TvlConfig, dependencies: TvlDependencies) {
-  const indexerService = dependencies.getIndexerService()
-  const syncOptimizer = dependencies.getSyncOptimizer()
-  const priceService = dependencies.getPriceService()
-  const hourlyIndexer = dependencies.getHourlyIndexer()
+  const indexerService = dependencies.indexerService
+  const syncOptimizer = dependencies.syncOptimizer
+  const priceService = dependencies.priceService
+  const hourlyIndexer = dependencies.hourlyIndexer
   const logger = dependencies.logger.tag({ module: 'price' })
 
   const byCoingeckoId = groupBy(config.prices, (price) => price.coingeckoId)
@@ -47,8 +50,8 @@ function createPriceIndexers(config: TvlConfig, dependencies: TvlDependencies) {
         coingeckoId: CoingeckoId(coingeckoId),
         configurations: prices.map((price) => ({
           properties: price,
-          minHeight: price.sinceTimestamp.toNumber(),
-          maxHeight: price.untilTimestamp?.toNumber() ?? null,
+          minHeight: price.sinceTimestamp,
+          maxHeight: price.untilTimestamp ?? null,
           id: createPriceId(price),
         })),
         priceService,
@@ -63,9 +66,7 @@ function createPriceIndexers(config: TvlConfig, dependencies: TvlDependencies) {
     tags: { tag: 'price' },
     parents: indexers,
     indexerService,
-    minHeight: Math.min(
-      ...config.prices.map((price) => price.sinceTimestamp.toNumber()),
-    ),
+    minHeight: Math.min(...config.prices.map((price) => price.sinceTimestamp)),
   })
 
   return { indexers, descendant }
@@ -87,9 +88,9 @@ function getBaseEntry(value: CoingeckoPriceConfigEntry) {
     assetId: value.assetId.toString(),
     address: value.address.toString(),
     chain: value.chain,
-    sinceTimestamp: value.sinceTimestamp.toNumber(),
+    sinceTimestamp: value.sinceTimestamp,
     ...(Object.keys(value).includes('untilTimestamp')
-      ? { untilTimestamp: value.untilTimestamp?.toNumber() }
+      ? { untilTimestamp: value.untilTimestamp }
       : {}),
   }
 }

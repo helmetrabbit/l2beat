@@ -1,11 +1,11 @@
-import { Logger } from '@l2beat/backend-tools'
-import { ConfigMapping } from '@l2beat/config'
+import { ConfigMapping } from '@l2beat/backend-shared'
+import type { Logger } from '@l2beat/backend-tools'
+import type { Database } from '@l2beat/database'
 import { assert } from '@l2beat/shared-pure'
-import { Config } from '../../../config/Config'
-import { Peripherals } from '../../../peripherals/Peripherals'
-import { Providers } from '../../../providers/Providers'
-import { Clock } from '../../../tools/Clock'
-import { ApplicationModule } from '../../ApplicationModule'
+import type { Config } from '../../../config/Config'
+import type { Providers } from '../../../providers/Providers'
+import type { Clock } from '../../../tools/Clock'
+import type { ApplicationModule } from '../../ApplicationModule'
 import { TvlCleaner } from '../utils/TvlCleaner'
 import { initAggLayerModule } from './AggLayerModule'
 import { initBlockTimestampModule } from './BlockTimestampModule'
@@ -19,7 +19,7 @@ import { TvlDependencies } from './TvlDependencies'
 export function initTvlModule(
   config: Config,
   logger: Logger,
-  peripherals: Peripherals,
+  database: Database,
   providers: Providers,
   clock: Clock,
 ): ApplicationModule | undefined {
@@ -30,35 +30,30 @@ export function initTvlModule(
 
   logger = logger.tag({ feature: 'tvl', module: 'tvl' })
 
-  const dependencies = new TvlDependencies(
-    peripherals.database,
-    clock,
-    logger,
-    providers,
-  )
+  const dependencies = new TvlDependencies(database, clock, logger, providers)
 
-  const syncOptimizer = dependencies.getSyncOptimizer()
+  const syncOptimizer = dependencies.syncOptimizer
 
   const configMapping = new ConfigMapping(
     config.tvl.prices,
     config.tvl.amounts,
-    config.tvl.projects.map((p) => p.projectId),
+    config.tvl.projects.map((p) => p.id),
   )
 
   const tvlCleaner = new TvlCleaner(
     clock,
     logger,
     syncOptimizer,
-    peripherals.database,
+    dependencies.database,
     [
-      peripherals.database.amount,
-      peripherals.database.blockTimestamp,
-      peripherals.database.price,
-      peripherals.database.value,
+      dependencies.database.amount,
+      dependencies.database.blockTimestamp,
+      dependencies.database.price,
+      dependencies.database.value,
     ],
   )
 
-  const hourlyIndexer = dependencies.getHourlyIndexer()
+  const hourlyIndexer = dependencies.hourlyIndexer
 
   assert(config.tvl.prices.length > 0, 'Tokens should be configured')
 
@@ -78,7 +73,6 @@ export function initTvlModule(
 
   const chainModule = initChainModule(
     config.tvl,
-    peripherals,
     dependencies,
     configMapping,
     priceModule.descendant,
@@ -87,7 +81,6 @@ export function initTvlModule(
 
   const premintedModule = initPremintedModule(
     config.tvl,
-    peripherals,
     dependencies,
     configMapping,
     priceModule.descendant,
@@ -96,7 +89,6 @@ export function initTvlModule(
 
   const aggLayerModule = initAggLayerModule(
     config.tvl,
-    peripherals,
     dependencies,
     configMapping,
     priceModule.descendant,
@@ -105,7 +97,6 @@ export function initTvlModule(
 
   const elasticChainModule = initElasticChainModule(
     config.tvl,
-    peripherals,
     dependencies,
     configMapping,
     priceModule.descendant,

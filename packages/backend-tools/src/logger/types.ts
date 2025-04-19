@@ -1,5 +1,5 @@
-import { LogLevel } from './LogLevel'
-import { ResolvedError } from './resolveError'
+import type { LogLevel } from './LogLevel'
+import type { ResolvedError } from './resolveError'
 
 export interface LoggerTransport {
   debug(message: string): void
@@ -25,11 +25,13 @@ export interface LoggerOptions {
   module?: string
   chain?: string
   project?: string
+  source?: string
   utc: boolean
   cwd: string
   getTime: () => Date
   reportError: (entry: LogEntry) => void
   transports: LoggerTransportOptions[]
+  metricsEnabled?: boolean
 }
 
 export interface LogEntry {
@@ -40,6 +42,7 @@ export interface LogEntry {
   module?: string
   chain?: string
   project?: string
+  source?: string
   message?: string
   error?: Error
   resolvedError?: ResolvedError

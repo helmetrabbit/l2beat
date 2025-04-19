@@ -2,7 +2,7 @@ import { EthereumAddress, UnixTime } from '@l2beat/shared-pure'
 import { expect } from 'earl'
 import { map } from 'lodash'
 
-import { AnalyzedContract } from '../analysis/AddressAnalyzer'
+import type { AnalyzedContract } from '../analysis/AddressAnalyzer'
 import { EMPTY_ANALYZED_CONTRACT } from '../utils/testUtils'
 import { getSourceOutputPath } from './saveDiscoveryResult'
 
@@ -14,7 +14,7 @@ describe(getSourceOutputPath.name, () => {
     address: EthereumAddress.random(),
     derivedName: undefined,
     isVerified: true,
-    deploymentTimestamp: new UnixTime(1234),
+    deploymentTimestamp: UnixTime(1234),
     deploymentBlockNumber: 9876,
     proxyType: 'immutable',
   })

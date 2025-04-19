@@ -1,21 +1,17 @@
-import { EthereumAddress } from '@l2beat/shared-pure'
+import { assert, type EthereumAddress } from '@l2beat/shared-pure'
 
-import {
-  ContractFieldSeverity,
-  ContractValue,
-  ContractValueType,
-  StackCategory,
-  get$Admins,
-} from '@l2beat/discovery-types'
-import { ContractOverrides } from '../config/DiscoveryOverrides'
-import {
-  DiscoveryContractField,
+import { groupBy } from 'lodash'
+import type {
   PermissionConfiguration,
   RawPermissionConfiguration,
-} from '../config/RawDiscoveryConfig'
+  StructureContractField,
+} from '../config/StructureConfig'
+import type { StructureContractConfig } from '../config/structureUtils'
 import { resolveReferenceFromValues } from '../handlers/reference'
 import { valueToNumber } from '../handlers/utils/valueToNumber'
-import { AnalyzedContract } from './AddressAnalyzer'
+import type { ContractValue } from '../output/types'
+import { get$Admins, toAddressArray } from '../utils/extractors'
+import type { Analysis } from './AddressAnalyzer'
 
 type AddressToMetaMap = { [address: string]: ContractMeta }
 
@@ -23,12 +19,7 @@ type AddressToMetaMap = { [address: string]: ContractMeta }
 // making sure ever field of meta is always processed.
 export interface ContractMeta {
   canActIndependently?: boolean
-  displayName?: string
-  description?: string
   permissions?: PermissionConfiguration[]
-  categories?: Set<StackCategory>
-  types?: Set<ContractValueType>
-  severity?: ContractFieldSeverity
 }
 
 export function mergeContractMeta(
@@ -36,16 +27,24 @@ export function mergeContractMeta(
   b?: ContractMeta,
 ): ContractMeta | undefined {
   const result: ContractMeta = {
-    displayName: a?.displayName ?? b?.displayName,
-    description: a?.description ?? b?.description,
     permissions: mergePermissions(a?.permissions, b?.permissions),
-    categories: mergeSets(a?.categories, b?.categories),
-    types: mergeSets(a?.types, b?.types),
-    severity: findHighestSeverity(a?.severity, b?.severity),
-    canActIndependently:
-      (a?.canActIndependently ?? false) || (b?.canActIndependently ?? false),
+    canActIndependently: mergeCanActIndependently(
+      a?.canActIndependently,
+      b?.canActIndependently,
+    ),
   }
   return isEmptyObject(result) ? undefined : result
+}
+
+export function mergeCanActIndependently(
+  a?: boolean | undefined,
+  b?: boolean | undefined,
+): boolean | undefined {
+  // Don't cast to false, undefined means we don't know
+  if (a === undefined && b === undefined) {
+    return undefined
+  }
+  return a ?? b
 }
 
 export function mergePermissions(
@@ -53,31 +52,45 @@ export function mergePermissions(
   b: PermissionConfiguration[] = [],
 ): PermissionConfiguration[] | undefined {
   const encodeKey = (v: PermissionConfiguration): string => {
-    return `${v.type}-${v.target.toString()}`
+    const key = `${v.type}-${v.target.toString()}-${v.condition ?? ''}`
+    // 'interact' permission is special - what it does is in its description,
+    // e.g. [interact "cancel tx"] and [interact "add tx"] shouldn't be grouped,
+    // regardless of the delay.
+    return v.type === 'interact' ? `${key}-${v.description ?? ''}` : key
   }
 
-  const accumulator: Map<string, PermissionConfiguration> = new Map()
-  for (const entry of a.concat(b)) {
-    const key = encodeKey(entry)
-    const comparisonEntry = accumulator.get(key) ?? entry
-    if (comparisonEntry.delay <= entry.delay) {
-      accumulator.set(key, entry)
+  const result: PermissionConfiguration[] = []
+  const grouping = groupBy(a.concat(b), encodeKey)
+  for (const key in grouping) {
+    const allEntries = grouping[key] ?? []
+    const shortestDelay = allEntries.reduce(
+      (a, b) => Math.min(a, b.delay),
+      Infinity,
+    )
+    const entries = allEntries.filter((e) => e.delay === shortestDelay)
+
+    const withDescription = entries.filter((e) => e.description !== undefined)
+    if (withDescription.length > 0) {
+      result.push(...withDescription)
+    } else if (entries.length > 0) {
+      const entry = entries.find((e) => e.description === undefined)
+      assert(entry !== undefined)
+      result.push(entry)
     }
   }
 
-  const result = [...accumulator.values()]
   return result.length === 0 ? undefined : result
 }
 
-export function interpolateDescription(
+export function interpolateString(
   description: string,
-  analysis: Omit<AnalyzedContract, 'selfMeta' | 'targetsMeta'>,
+  analysis: Omit<Analysis, 'selfMeta' | 'targetsMeta'>,
 ): string {
   return description.replace(/\{\{\s*((\$\.?)?\w+)\s*\}\}/g, (_match, key) => {
     const value = key === '$.address' ? analysis.address : analysis.values[key]
     if (value === undefined) {
       throw new Error(
-        `Value for variable "{{ ${key} }}" in contract description not found in contract analysis`,
+        `Value for variable "{{ ${key} }}" in contract field not found in contract analysis`,
       )
     }
     return String(value)
@@ -85,40 +98,32 @@ export function interpolateDescription(
 }
 
 export function getSelfMeta(
-  overrides: ContractOverrides | undefined,
-  analysis: Omit<AnalyzedContract, 'selfMeta' | 'targetsMeta'>,
+  config: StructureContractConfig,
 ): ContractMeta | undefined {
-  if (overrides?.description === undefined) {
-    return undefined
-  }
-  const description = interpolateDescription(overrides?.description, analysis)
-  return {
-    canActIndependently: overrides.canActIndependently,
-    displayName: overrides.displayName ?? undefined,
-    description,
+  const result = {
+    canActIndependently: config.canActIndependently,
     permissions: undefined,
-    categories: undefined,
-    severity: undefined,
-    types: undefined,
   }
+
+  return isEmptyObject(result) ? undefined : result
 }
 
 export function getTargetsMeta(
   self: EthereumAddress,
   values: Record<string, ContractValue | undefined> = {},
-  fields: { [address: string]: DiscoveryContractField } = {},
-  analysis: Omit<AnalyzedContract, 'selfMeta' | 'targetsMeta'>,
+  fields: { [address: string]: StructureContractField } = {},
+  analysis: Omit<Analysis, 'selfMeta' | 'targetsMeta'>,
 ): AddressToMetaMap | undefined {
-  const result = getMetaFromUpgradeability(self, get$Admins(values))
+  const result: AddressToMetaMap = {}
 
   for (const [fieldName, value] of Object.entries(values)) {
     const field = fields[fieldName]
-    const target = field?.target
+    const target = field?.permissions
     if (target) {
-      for (const address of getAddresses(value)) {
+      for (const address of toAddressArray(value)) {
         const meta = mergeContractMeta(
           result[address.toString()],
-          targetConfigToMeta(self, field, target, analysis),
+          targetConfigToMeta(self, field, analysis),
         )
         if (meta) {
           result[address.toString()] = meta
@@ -127,48 +132,42 @@ export function getTargetsMeta(
     }
   }
 
-  return isEmptyObject(result) ? undefined : result
-}
+  // NOTE(radomski): Only add an upgrade permission if it hasn't been
+  // configured previously. This is necessary because if a template configures
+  // the upgrade permission with a delay, we shouldn't override it with the
+  // default zero-delay permission. We always search for the smallest delay, so
+  // a zero delay would always take precedence.
+  for (const upgradeabilityAdmin of get$Admins(values)) {
+    const permissions =
+      result[upgradeabilityAdmin.toString()]?.permissions ?? []
 
-export function getMetaFromUpgradeability(
-  self: EthereumAddress,
-  admins: EthereumAddress[],
-): AddressToMetaMap {
-  const result: Record<string, ContractMeta> = {}
-  for (const upgradeabilityAdmin of admins) {
-    if (upgradeabilityAdmin !== undefined) {
-      result[upgradeabilityAdmin.toString()] = {
-        displayName: undefined,
-        categories: undefined,
-        description: undefined,
-        severity: undefined,
-        types: undefined,
+    if (!permissions.some((p) => p.type === 'upgrade')) {
+      const meta = mergeContractMeta(result[upgradeabilityAdmin.toString()], {
         permissions: [{ type: 'upgrade', target: self, delay: 0 }],
+      })
+
+      if (meta) {
+        result[upgradeabilityAdmin.toString()] = meta
       }
     }
   }
-  return result
+
+  return isEmptyObject(result) ? undefined : result
 }
 
 function targetConfigToMeta(
   self: EthereumAddress,
-  field: DiscoveryContractField,
-  target: DiscoveryContractField['target'],
-  analysis: Omit<AnalyzedContract, 'selfMeta' | 'targetsMeta'>,
+  field: StructureContractField,
+  analysis: Omit<Analysis, 'selfMeta' | 'targetsMeta'>,
 ): ContractMeta | undefined {
-  if (target === undefined) {
+  if (field.permissions === undefined) {
     return undefined
   }
 
   const result: ContractMeta = {
-    displayName: undefined,
-    description: undefined,
-    permissions: target.permissions?.map((p) =>
+    permissions: field.permissions?.map((p) =>
       linkPermission(p, self, analysis.values, analysis),
     ),
-    categories: toSet(target.category),
-    types: toSet(field.type),
-    severity: Array.from(toSet(field.severity) ?? [])[0],
   }
   return isEmptyObject(result) ? undefined : result
 }
@@ -176,8 +175,8 @@ function targetConfigToMeta(
 function linkPermission(
   rawPermission: RawPermissionConfiguration,
   self: EthereumAddress,
-  values: AnalyzedContract['values'],
-  analysis: Omit<AnalyzedContract, 'selfMeta' | 'targetsMeta'>,
+  values: Analysis['values'],
+  analysis: Omit<Analysis, 'selfMeta' | 'targetsMeta'>,
 ): PermissionConfiguration {
   let delay = rawPermission.delay
   if (typeof delay === 'string') {
@@ -188,14 +187,17 @@ function linkPermission(
     type: rawPermission.type,
     delay,
     description: rawPermission.description
-      ? interpolateDescription(rawPermission.description, analysis)
+      ? interpolateString(rawPermission.description, analysis)
+      : undefined,
+    condition: rawPermission.condition
+      ? interpolateString(rawPermission.condition, analysis)
       : undefined,
     target: self,
   }
 }
 
 export function invertMeta(
-  targetsMeta: AnalyzedContract['targetsMeta'][],
+  targetsMeta: Analysis['targetsMeta'][],
 ): AddressToMetaMap {
   const result: AddressToMetaMap = {}
 
@@ -212,42 +214,6 @@ export function invertMeta(
   return result
 }
 
-function toSet<T>(value: T | T[] | undefined): Set<T> | undefined {
-  if (value === undefined) {
-    return undefined
-  }
-  if (Array.isArray(value)) {
-    return new Set([...value])
-  }
-  return new Set([value])
-}
-
-function mergeSets<T>(
-  a: Set<T> | undefined,
-  b: Set<T> | undefined,
-): Set<T> | undefined {
-  if (a === undefined && b === undefined) {
-    return undefined
-  }
-  return new Set([...(a ?? []), ...(b ?? [])])
-}
-
-export function findHighestSeverity(
-  a: ContractFieldSeverity | undefined,
-  b: ContractFieldSeverity | undefined,
-): ContractFieldSeverity | undefined {
-  if (a === undefined && b === undefined) {
-    return undefined
-  }
-  if (a === 'HIGH' || b === 'HIGH') {
-    return 'HIGH'
-  }
-  if (a === 'MEDIUM' || b === 'MEDIUM') {
-    return 'MEDIUM'
-  }
-  return 'LOW'
-}
-
 function isEmptyObject(obj: object): boolean {
   return (
     Object.keys(obj).length === 0 ||
@@ -257,21 +223,4 @@ function isEmptyObject(obj: object): boolean {
 
 function isDefined<T>(value: T | undefined): value is T {
   return value !== undefined
-}
-
-export function getAddresses(
-  value: ContractValue | undefined,
-): EthereumAddress[] {
-  if (Array.isArray(value)) {
-    return value.flatMap((v) => getAddresses(v))
-  } else if (typeof value === 'object') {
-    return Object.values(value).flatMap((v) => getAddresses(v))
-  } else if (typeof value === 'string') {
-    try {
-      return [EthereumAddress(value)]
-    } catch {
-      return []
-    }
-  }
-  return []
 }

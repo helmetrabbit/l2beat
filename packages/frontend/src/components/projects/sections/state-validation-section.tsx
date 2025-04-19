@@ -1,16 +1,16 @@
-import { type ScalingProjectStateValidation } from '@l2beat/config'
+import type { ProjectScalingStateValidation } from '@l2beat/config'
 import { DiagramImage } from '~/components/diagram-image'
-import { type DiagramParams } from '~/utils/project/get-diagram-params'
+import type { DiagramParams } from '~/utils/project/get-diagram-params'
 import { HorizontalSeparator } from '../../core/horizontal-separator'
 import { Markdown } from '../../markdown/markdown'
 import { ProjectSection } from './project-section'
 import { ReferenceList } from './reference-list'
 import { RiskList } from './risk-list'
-import { type ProjectSectionProps } from './types'
+import type { ProjectSectionProps } from './types'
 
 export interface StateValidationSectionProps extends ProjectSectionProps {
   diagram: DiagramParams | undefined
-  stateValidation: ScalingProjectStateValidation
+  stateValidation: ProjectScalingStateValidation
 }
 
 export function StateValidationSection({
@@ -23,7 +23,7 @@ export function StateValidationSection({
       {diagram && (
         <figure className="mb-8 mt-4 text-center">
           <DiagramImage diagram={diagram} />
-          <figcaption className="text-xs text-gray-500 dark:text-gray-600">
+          <figcaption className="text-xs text-secondary">
             {diagram.caption}
           </figcaption>
         </figure>
@@ -42,7 +42,7 @@ export function StateValidationSection({
 }
 
 type CategoryProps = {
-  category: ScalingProjectStateValidation['categories'][number]
+  category: ProjectScalingStateValidation['categories'][number]
 }
 
 function Category({ category }: CategoryProps) {

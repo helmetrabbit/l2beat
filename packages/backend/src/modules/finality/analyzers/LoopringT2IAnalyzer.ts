@@ -1,9 +1,12 @@
-import { assert, ProjectId, TrackedTxsConfigSubtype } from '@l2beat/shared-pure'
+import {
+  assert,
+  type ProjectId,
+  type TrackedTxsConfigSubtype,
+} from '@l2beat/shared-pure'
 import { BigNumber, utils } from 'ethers'
 
-import { Database } from '@l2beat/database'
-import { LoopringClient } from '@l2beat/shared'
-import { RpcClient } from '../../../peripherals/rpcclient/RpcClient'
+import type { Database } from '@l2beat/database'
+import type { LoopringClient, RpcClient } from '@l2beat/shared'
 import { BaseAnalyzer } from './types/BaseAnalyzer'
 import type { L2Block, Transaction } from './types/BaseAnalyzer'
 
@@ -25,10 +28,9 @@ export class LoopringT2IAnalyzer extends BaseAnalyzer {
     _previousTransaction: Transaction,
     { txHash }: Transaction,
   ): Promise<L2Block[]> {
-    const tx = await this.provider.getTransaction(txHash)
-    const { logs } = await tx.wait()
+    const receipt = await this.provider.getTransactionReceipt(txHash)
 
-    const log = logs
+    const log = receipt.logs
       .filter(
         (log) =>
           log.topics[0] ===
@@ -39,10 +41,12 @@ export class LoopringT2IAnalyzer extends BaseAnalyzer {
 
     assert(log, 'BlockSubmitted log not found')
 
-    const blockIdx = BigNumber.from(log.args.blockIdx).toNumber()
-    const block = await this.l2Provider.getBlockWithTransactions(blockIdx)
+    const blockIdx = BigNumber.from(log.args.blockIdx)
+    const block = await this.l2Provider.getBlockWithTransactions(
+      blockIdx.toNumber(),
+    )
 
-    return [{ blockNumber: blockIdx, timestamp: block.timestamp }]
+    return [{ blockNumber: blockIdx.toNumber(), timestamp: block.timestamp }]
   }
 
   private decodeLog(log: { topics: string[]; data: string }) {

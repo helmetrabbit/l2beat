@@ -1,9 +1,9 @@
-import { ContractValue } from '@l2beat/discovery-types'
 import { EthereumAddress } from '@l2beat/shared-pure'
 import { expect, mockObject } from 'earl'
 import { utils } from 'ethers'
+import type { ContractValue } from '../../output/types'
 
-import { IProvider } from '../../provider/IProvider'
+import type { IProvider } from '../../provider/IProvider'
 import { callMethod } from './callMethod'
 
 describe('callMethod', () => {

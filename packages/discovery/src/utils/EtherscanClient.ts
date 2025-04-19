@@ -8,22 +8,21 @@ import {
   stringAsInt,
 } from '@l2beat/shared-pure'
 
-import { ContractSource } from './IEtherscanClient'
+import type { ContractSource } from './IEtherscanClient'
 
+import type { HttpClient } from '@l2beat/shared'
 import { z } from 'zod'
 import {
   ContractCreatorAndCreationTxHashResult,
   ContractSourceResult,
   OneTransactionListResult,
-  TwentyTransactionListResult,
+  TransactionListResult,
   tryParseEtherscanResponse,
 } from './EtherscanModels'
-import { HttpClient } from './HttpClient'
-import {
+import type {
   EtherscanUnsupportedMethods,
   IEtherscanClient,
 } from './IEtherscanClient'
-import { getErrorMessage } from './getErrorMessage'
 import { jsonToHumanReadableAbi } from './jsonToHumanReadableAbi'
 
 class EtherscanError extends Error {}
@@ -63,13 +62,7 @@ export class EtherscanClient implements IEtherscanClient {
     apiKey: string,
     unsupportedMethods: EtherscanUnsupportedMethods = {},
   ): EtherscanClient {
-    return new EtherscanClient(
-      httpClient,
-      url,
-      apiKey,
-      new UnixTime(0),
-      unsupportedMethods,
-    )
+    return new EtherscanClient(httpClient, url, apiKey, 0, unsupportedMethods)
   }
 
   // Etherscan API is not stable enough to trust it to return "closest" block.
@@ -80,9 +73,9 @@ export class EtherscanClient implements IEtherscanClient {
   //
   // To mitigate this, we need to go back in time by 10 minutes until we find a block
   async getBlockNumberAtOrBefore(timestamp: UnixTime): Promise<number> {
-    let current = new UnixTime(timestamp.toNumber())
+    let current = UnixTime(timestamp)
 
-    while (current.gte(this.minTimestamp)) {
+    while (current >= this.minTimestamp) {
       try {
         const result = await this.callWithRetries('block', 'getblocknobytime', {
           timestamp: current.toString(),
@@ -102,7 +95,7 @@ export class EtherscanClient implements IEtherscanClient {
           throw new Error(errorObject.message)
         }
 
-        current = current.add(-10, 'minutes')
+        current = current - 10 * UnixTime.MINUTE
       }
     }
 
@@ -198,57 +191,32 @@ export class EtherscanClient implements IEtherscanClient {
     const resp = OneTransactionListResult.parse(response)[0]
     assert(resp)
 
-    return new UnixTime(parseInt(resp.timeStamp, 10))
+    return UnixTime(parseInt(resp.timeStamp, 10))
   }
 
-  async getLast10OutgoingTxs(
+  async getAtMost10RecentOutgoingTxs(
     address: EthereumAddress,
     blockNumber: number,
   ): Promise<{ input: string; to: EthereumAddress; hash: Hash256 }[]> {
-    // NOTE(radomski): There is a retry here because Etherscan sometimes
-    // responds with 200, no error, everything is supposed to be fine but the
-    // amount of txs they returns is less then expected. This happens every
-    // so often, but makes our UpdateMonitor channel rife with processing
-    // errors
-    let attempts = 0
-    while (true) {
-      try {
-        const response = await this.callWithRetries('account', 'txlist', {
-          address: address.toString(),
-          startblock: '0',
-          endblock: blockNumber.toString(),
-          page: '1',
-          offset: '20',
-          sort: 'desc',
-        })
+    const response = await this.callWithRetries('account', 'txlist', {
+      address: address.toString(),
+      startblock: '0',
+      endblock: blockNumber.toString(),
+      page: '1',
+      offset: '50',
+      sort: 'desc',
+    })
 
-        const resp = TwentyTransactionListResult.parse(response)
-        assert(resp)
-        const outgoingTxs = resp
-          .filter((tx) => EthereumAddress(tx.from) === address)
-          .slice(0, 10)
+    const resp = TransactionListResult.parse(response)
+    const outgoingTxs = resp
+      .filter((tx) => EthereumAddress(tx.from) === address)
+      .slice(0, 10)
 
-        assert(
-          outgoingTxs.length === 10,
-          'Not enough outgoing transactions, expected 10, received ' +
-            outgoingTxs.length.toString(),
-        )
-
-        return outgoingTxs.map((r) => ({
-          input: r.input,
-          to: EthereumAddress(r.to),
-          hash: Hash256(r.hash),
-        }))
-      } catch (error) {
-        attempts++
-        const result = shouldRetry(attempts, error)
-        if (result.shouldStop) {
-          throw error
-        }
-        this.logger.warn('Retrying', { attempts, error })
-        await new Promise((resolve) => setTimeout(resolve, result.executeAfter))
-      }
-    }
+    return outgoingTxs.map((r) => ({
+      input: r.input,
+      to: EthereumAddress(r.to),
+      hash: Hash256(r.hash),
+    }))
   }
 
   async callWithRetries(
@@ -285,53 +253,22 @@ export class EtherscanClient implements IEtherscanClient {
     })
     const url = `${this.url}?${query.toString()}`
 
-    const start = Date.now()
-    const { httpResponse, error } = await this.httpClient
-      .fetch(url, { timeout: this.timeoutMs })
-      .then(
-        (httpResponse) => ({ httpResponse, error: undefined }),
-        (error: unknown) => ({ httpResponse: undefined, error }),
-      )
-    const timeMs = Date.now() - start
+    const response = await this.httpClient.fetch(url, {
+      timeout: this.timeoutMs,
+    })
 
-    if (!httpResponse) {
-      const message = getErrorMessage(error)
-      this.recordError(module, action, timeMs, message)
-      throw error
-    }
-
-    const text = await httpResponse.text()
-    const etherscanResponse = tryParseEtherscanResponse(text)
-
-    if (!httpResponse.ok) {
-      this.recordError(module, action, timeMs, text)
-      throw new Error(
-        `Server responded with non-2XX result: ${httpResponse.status} ${httpResponse.statusText}`,
-      )
-    }
+    const etherscanResponse = tryParseEtherscanResponse(response)
 
     if (!etherscanResponse) {
-      const message = `Invalid Etherscan response [${text}] for request [${url}].`
-      this.recordError(module, action, timeMs, message)
+      const message = `Invalid Etherscan response [${JSON.stringify(response)}] for request [${url}].`
       throw new TypeError(message)
     }
 
     if (etherscanResponse.message !== 'OK') {
-      this.recordError(module, action, timeMs, etherscanResponse.result)
       throw new EtherscanError(etherscanResponse.result)
     }
 
-    this.logger.debug({ type: 'success', timeMs, module, action })
     return etherscanResponse.result
-  }
-
-  protected recordError(
-    module: string,
-    action: string,
-    timeMs: number,
-    message: string,
-  ): void {
-    this.logger.debug({ type: 'error', message, timeMs, module, action })
   }
 }
 

@@ -1,14 +1,14 @@
 import { posix } from 'path'
+import type { Logger } from '@l2beat/backend-tools'
 import { timed } from '@l2beat/shared'
 import { assert } from '@l2beat/shared-pure'
-import { FileContent } from '../../flatten/ParsedFilesManager'
+import type { FileContent } from '../../flatten/ParsedFilesManager'
 import { flattenStartingFrom } from '../../flatten/flatten'
-import { DiscoveryLogger } from '../DiscoveryLogger'
-import { Analysis } from '../analysis/AddressAnalyzer'
+import type { Analysis } from '../analysis/AddressAnalyzer'
 
 export function flattenDiscoveredSources(
   results: Analysis[],
-  logger: DiscoveryLogger,
+  logger: Logger,
 ): Record<string, string> {
   const nameCounts = new Map<string, number>()
   for (const contract of results) {

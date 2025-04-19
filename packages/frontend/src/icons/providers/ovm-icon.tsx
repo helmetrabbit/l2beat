@@ -1,6 +1,7 @@
 import { useId } from 'react'
 import { cn } from '~/utils/cn'
-import { SvgIcon, type SvgIconProps } from '../svg-icon'
+import type { SvgIconProps } from '../svg-icon'
+import { SvgIcon } from '../svg-icon'
 
 export function OVMIcon(props: SvgIconProps) {
   const gradientId = useId()
@@ -26,7 +27,7 @@ export function OVMIcon(props: SvgIconProps) {
             id={gradientId}
             x1="24"
             y1="3"
-            x2="id6"
+            x2="0"
             y2="21"
             gradientUnits="userSpaceOnUse"
           >

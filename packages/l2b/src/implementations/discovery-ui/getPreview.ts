@@ -1,16 +1,13 @@
-import {
-  ProjectDiscovery,
-  ScalingProjectContract,
-  ScalingProjectPermission,
-  isSingleAddress,
-} from '@l2beat/config'
-import { ConfigReader } from '@l2beat/discovery'
-import { ContractsMeta, getMeta } from './getMeta'
+import type { ProjectContract, ProjectPermissions } from '@l2beat/config'
+import { ProjectDiscovery } from '@l2beat/config/build/discovery/ProjectDiscovery'
+import type { ConfigReader } from '@l2beat/discovery'
+import { getProjectDiscoveries } from './getDiscoveries'
+import { type ContractsMeta, getMeta } from './getMeta'
 import { toAddress } from './toAddress'
-import {
+import type {
   AddressFieldValue,
   ApiPreviewContract,
-  ApiPreviewPermission,
+  ApiPreviewPermissions,
   ApiPreviewResponse,
 } from './types'
 
@@ -31,17 +28,17 @@ export function getPreview(
 
   const permissionsPerChain: {
     chain: string
-    permissions: ScalingProjectPermission[]
+    permissions: ProjectPermissions
   }[] = []
   const contractsPerChain: {
     chain: string
-    contracts: ScalingProjectContract[]
+    contracts: ProjectContract[]
   }[] = []
 
   const metaPerChain: { [chain: string]: ContractsMeta } = {}
   projectChains.forEach((chain) => {
-    const discovery = configReader.readDiscovery(projectId, chain)
-    metaPerChain[chain] = getMeta(discovery)
+    const discoveries = getProjectDiscoveries(configReader, projectId, chain)
+    metaPerChain[chain] = getMeta(discoveries)
     const processor = new ProjectDiscovery(projectId, chain)
     permissionsPerChain.push({
       chain,
@@ -65,39 +62,49 @@ export function getPreview(
 function getPermissionsPreview(
   permissionsPerChain: {
     chain: string
-    permissions: ScalingProjectPermission[]
+    permissions: ProjectPermissions
   }[],
   metaPerChain: { [chain: string]: ContractsMeta },
-): { chain: string; permissions: ApiPreviewPermission[] }[] {
+): { chain: string; permissions: ApiPreviewPermissions }[] {
   return permissionsPerChain.map(({ chain, permissions }) => ({
     chain,
-    permissions: permissions.map((p) => ({
-      addresses: p.accounts.map((a) =>
-        toAddressFieldValue(a.address, chain, metaPerChain),
-      ),
-      name: p.name,
-      description: p.description,
-      multisigParticipants: p.participants?.map((x) =>
-        toAddressFieldValue(x.address, chain, metaPerChain),
-      ),
-    })),
+    permissions: {
+      roles: (permissions.roles ?? []).map((p) => ({
+        addresses: p.accounts.map((a) =>
+          toAddressFieldValue(a.address, chain, metaPerChain),
+        ),
+        name: p.name,
+        description: p.description,
+        multisigParticipants: p.participants?.map((x) =>
+          toAddressFieldValue(x.address, chain, metaPerChain),
+        ),
+      })),
+      actors: (permissions.actors ?? []).map((p) => ({
+        addresses: p.accounts.map((a) =>
+          toAddressFieldValue(a.address, chain, metaPerChain),
+        ),
+        name: p.name,
+        description: p.description,
+        multisigParticipants: p.participants?.map((x) =>
+          toAddressFieldValue(x.address, chain, metaPerChain),
+        ),
+      })),
+    },
   }))
 }
 
 function getContractsPreview(
-  contractsPerChain: { chain: string; contracts: ScalingProjectContract[] }[],
+  contractsPerChain: { chain: string; contracts: ProjectContract[] }[],
   metaPerChain: { [chain: string]: ContractsMeta },
 ): { chain: string; contracts: ApiPreviewContract[] }[] {
   return contractsPerChain.map(({ chain, contracts }) => ({
     chain,
     contracts: contracts.map((c) => {
-      const addresses = isSingleAddress(c) ? [c.address] : c.multipleAddresses
       return {
-        addresses: addresses.map((a) =>
-          toAddressFieldValue(a, chain, metaPerChain),
-        ),
+        addresses: [toAddressFieldValue(c.address, chain, metaPerChain)],
         name: c.name,
         description: c.description ?? '',
+        upgradableBy: c.upgradableBy,
       }
     }),
   }))

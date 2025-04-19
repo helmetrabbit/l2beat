@@ -1,11 +1,14 @@
 import { EthereumAddress, UnixTime } from '@l2beat/shared-pure'
 import { expect, mockFn, mockObject } from 'earl'
 
-import { DiscoveryLogger } from '../DiscoveryLogger'
-import { AddressAnalyzer } from '../analysis/AddressAnalyzer'
-import { DiscoveryConfig } from '../config/DiscoveryConfig'
-import { RawDiscoveryConfig } from '../config/RawDiscoveryConfig'
-import { IProvider } from '../provider/IProvider'
+import { Logger } from '@l2beat/backend-tools'
+import type { AddressAnalyzer } from '../analysis/AddressAnalyzer'
+import { ConfigRegistry } from '../config/ConfigRegistry'
+import {
+  type StructureConfig,
+  StructureContract,
+} from '../config/StructureConfig'
+import type { IProvider } from '../provider/IProvider'
 import { EMPTY_ANALYZED_CONTRACT } from '../utils/testUtils'
 import { DiscoveryEngine } from './DiscoveryEngine'
 
@@ -13,7 +16,7 @@ const base = {
   ...EMPTY_ANALYZED_CONTRACT,
   derivedName: undefined,
   isVerified: true,
-  deploymentTimestamp: new UnixTime(1234),
+  deploymentTimestamp: UnixTime(1234),
   deploymentBlockNumber: 9876,
   selfMeta: undefined,
   targetsMeta: undefined,
@@ -32,7 +35,7 @@ describe(DiscoveryEngine.name, () => {
 
   it('can perform a discovery', async () => {
     const config = generateFakeConfig([A], {
-      [B.toString()]: { ignoreDiscovery: true },
+      [B.toString()]: StructureContract.parse({ ignoreDiscovery: true }),
     })
 
     const addressAnalyzer = mockObject<AddressAnalyzer>({
@@ -61,8 +64,8 @@ describe(DiscoveryEngine.name, () => {
         relatives: {},
       })
 
-    const engine = new DiscoveryEngine(addressAnalyzer, DiscoveryLogger.SILENT)
-    const result = await engine.discover(provider, config)
+    const engine = new DiscoveryEngine(addressAnalyzer, Logger.SILENT)
+    const result = await engine.discover(provider, config.structure)
 
     expect(result).toEqual([
       {
@@ -86,9 +89,9 @@ describe(DiscoveryEngine.name, () => {
 
 const generateFakeConfig = (
   initialAddresses: EthereumAddress[],
-  overrides: RawDiscoveryConfig['overrides'],
-): DiscoveryConfig => {
-  return new DiscoveryConfig({
+  overrides: StructureConfig['overrides'],
+): ConfigRegistry => {
+  return new ConfigRegistry({
     name: 'test',
     chain: 'ethereum',
     initialAddresses,

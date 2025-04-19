@@ -1,5 +1,5 @@
 import { cn } from '~/utils/cn'
-import { type SvgIconProps } from './svg-icon'
+import type { SvgIconProps } from './svg-icon'
 
 function TrendArrowIcon(props: SvgIconProps) {
   return (
@@ -14,10 +14,7 @@ export function TrendArrowUpIcon(props: SvgIconProps) {
     <TrendArrowIcon
       aria-label="Arrow up icon"
       alt-text="+"
-      className={cn(
-        'inline-block fill-green-300 dark:fill-green-450',
-        props.className,
-      )}
+      className={cn('inline-block fill-positive', props.className)}
     />
   )
 }

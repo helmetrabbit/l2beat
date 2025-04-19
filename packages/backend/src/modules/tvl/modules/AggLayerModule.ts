@@ -1,27 +1,25 @@
 import {
   AGGLAYER_L2BRIDGE_ADDRESS,
-  ConfigMapping,
+  type ConfigMapping,
   createAmountId,
-} from '@l2beat/config'
+} from '@l2beat/backend-shared'
 import {
   assert,
-  AggLayerL2Token,
-  AggLayerNativeEtherPreminted,
-  AggLayerNativeEtherWrapped,
+  type AggLayerL2Token,
+  type AggLayerNativeEtherPreminted,
+  type AggLayerNativeEtherWrapped,
   ProjectId,
 } from '@l2beat/shared-pure'
 import { groupBy } from 'lodash'
-import { ChainTvlConfig, TvlConfig } from '../../../config/Config'
-import { Peripherals } from '../../../peripherals/Peripherals'
+import type { ChainTvlConfig, TvlConfig } from '../../../config/Config'
 import { MulticallClient } from '../../../peripherals/multicall/MulticallClient'
-import { RpcClient } from '../../../peripherals/rpcclient/RpcClient'
 import { AggLayerIndexer } from '../indexers/AggLayerIndexer'
-import { BlockTimestampIndexer } from '../indexers/BlockTimestampIndexer'
-import { DescendantIndexer } from '../indexers/DescendantIndexer'
+import type { BlockTimestampIndexer } from '../indexers/BlockTimestampIndexer'
+import type { DescendantIndexer } from '../indexers/DescendantIndexer'
 import { ValueIndexer } from '../indexers/ValueIndexer'
-import { AggLayerAmountConfig } from '../indexers/types'
+import type { AggLayerAmountConfig } from '../indexers/types'
 import { AggLayerService } from '../services/AggLayerService'
-import { TvlDependencies } from './TvlDependencies'
+import type { TvlDependencies } from './TvlDependencies'
 
 interface AggLayerModule {
   start: () => Promise<void> | void
@@ -29,7 +27,6 @@ interface AggLayerModule {
 
 export function initAggLayerModule(
   config: TvlConfig,
-  peripherals: Peripherals,
   dependencies: TvlDependencies,
   configMapping: ConfigMapping,
   descendantPriceIndexer: DescendantIndexer,
@@ -37,7 +34,6 @@ export function initAggLayerModule(
 ): AggLayerModule | undefined {
   const { dataIndexers, valueIndexers } = createIndexers(
     config,
-    peripherals,
     dependencies,
     configMapping,
     descendantPriceIndexer,
@@ -60,29 +56,23 @@ export function initAggLayerModule(
 
 function createIndexers(
   config: TvlConfig,
-  peripherals: Peripherals,
   dependencies: TvlDependencies,
   configMapping: ConfigMapping,
   descendantPriceIndexer: DescendantIndexer,
   blockTimestampIndexers?: Map<string, BlockTimestampIndexer>,
 ) {
   const logger = dependencies.logger.tag({ module: 'aggLayer' })
-  const indexerService = dependencies.getIndexerService()
-  const syncOptimizer = dependencies.getSyncOptimizer()
-  const valueService = dependencies.getValueService()
+  const indexerService = dependencies.indexerService
+  const syncOptimizer = dependencies.syncOptimizer
+  const valueService = dependencies.valueService
 
   const dataIndexers: AggLayerIndexer[] = []
   const valueIndexers: ValueIndexer[] = []
 
-  for (const chainConfig of config.chains) {
-    const chain = chainConfig.chain
-    if (!chainConfig.config) {
-      continue
-    }
-
+  for (const chain of config.chains) {
     const aggLayerAmountEntries = config.amounts.filter(
       (a): a is AggLayerAmountConfig =>
-        a.chain === chain &&
+        a.chain === chain.name &&
         (a.type === 'aggLayerL2Token' ||
           a.type === 'aggLayerNativeEtherPreminted' ||
           a.type === 'aggLayerNativeEtherWrapped'),
@@ -92,40 +82,33 @@ function createIndexers(
       continue
     }
 
-    const rpcClient = peripherals.getClient(RpcClient, {
-      url: chainConfig.config.providerUrl,
-      callsPerMinute: chainConfig.config.providerCallsPerMinute,
-      chain: chainConfig.chain,
-    })
+    const rpcClient = dependencies.clients.getRpcClient(chain.name)
 
     const aggLayerService = new AggLayerService({
       rpcClient: rpcClient,
-      multicallClient: new MulticallClient(
-        rpcClient,
-        chainConfig.config.multicallConfig,
-      ),
+      multicallClient: new MulticallClient(rpcClient, chain.multicallConfig),
       bridgeAddress: AGGLAYER_L2BRIDGE_ADDRESS,
     })
 
     const blockTimestampIndexer =
-      blockTimestampIndexers && blockTimestampIndexers.get(chain)
+      blockTimestampIndexers && blockTimestampIndexers.get(chain.name)
     assert(
       blockTimestampIndexer,
       'blockTimestampIndexer should be defined for enabled chain',
     )
 
-    const configurations = toConfigurations(chainConfig, aggLayerAmountEntries)
+    const configurations = toConfigurations(chain, aggLayerAmountEntries)
 
     const aggLayerIndexer = new AggLayerIndexer({
       logger,
       parents: [blockTimestampIndexer],
       indexerService,
       configurations,
-      chain,
+      chain: chain.name,
       aggLayerService,
       serializeConfiguration,
       syncOptimizer,
-      db: peripherals.database,
+      db: dependencies.database,
     })
 
     dataIndexers.push(aggLayerIndexer)
@@ -139,20 +122,18 @@ function createIndexers(
         ),
       )
 
-      const minHeight = Math.min(
-        ...amountConfigs.map((c) => c.sinceTimestamp.toNumber()),
-      )
+      const minHeight = Math.min(...amountConfigs.map((c) => c.sinceTimestamp))
       const maxHeight = Math.max(
-        ...amountConfigs.map((c) => c.untilTimestamp?.toNumber() ?? Infinity),
+        ...amountConfigs.map((c) => c.untilTimestamp ?? Infinity),
       )
 
       const indexer = new ValueIndexer({
         valueService,
-        db: peripherals.database,
+        db: dependencies.database,
         priceConfigs: [...priceConfigs],
         amountConfigs,
         project: ProjectId(project),
-        dataSource: `${chain}_agglayer`,
+        dataSource: `${chain.name}_agglayer`,
         syncOptimizer,
         parents: [descendantPriceIndexer, aggLayerIndexer],
         indexerService,
@@ -169,18 +150,17 @@ function createIndexers(
 }
 
 function toConfigurations(
-  chainConfig: ChainTvlConfig,
+  chain: ChainTvlConfig,
   aggLayerAmountEntries: AggLayerAmountConfig[],
 ) {
-  assert(chainConfig.config)
-  const chainMinTimestamp = chainConfig.config.minBlockTimestamp
   const aggLayerAmountConfigurations = aggLayerAmountEntries.map((a) => ({
     id: createAmountId(a),
     properties: a,
-    minHeight: a.sinceTimestamp.lt(chainMinTimestamp)
-      ? chainMinTimestamp.toNumber()
-      : a.sinceTimestamp.toNumber(),
-    maxHeight: a.untilTimestamp?.toNumber() ?? null,
+    minHeight:
+      a.sinceTimestamp < chain.minBlockTimestamp
+        ? chain.minBlockTimestamp
+        : a.sinceTimestamp,
+    maxHeight: a.untilTimestamp ?? null,
   }))
   return aggLayerAmountConfigurations
 }
@@ -240,9 +220,9 @@ function getBaseEntry(
     chain: value.chain,
     project: value.project.toString(),
     source: value.source,
-    sinceTimestamp: value.sinceTimestamp.toNumber(),
+    sinceTimestamp: value.sinceTimestamp,
     ...(Object.keys(value).includes('untilTimestamp')
-      ? { untilTimestamp: value.untilTimestamp?.toNumber() }
+      ? { untilTimestamp: value.untilTimestamp }
       : {}),
     includeInTotal: value.includeInTotal,
     decimals: value.decimals,

@@ -1,21 +1,24 @@
 import type { AggregatedL2CostRecord } from '@l2beat/database'
-import { type UnixTime } from '@l2beat/shared-pure'
+import { UnixTime } from '@l2beat/shared-pure'
+import { unstable_cache as cache } from 'next/cache'
 import { z } from 'zod'
 import { env } from '~/env'
-import { db } from '~/server/database'
-import { getRange } from '~/utils/range/range'
+import { getDb } from '~/server/database'
+import { getRange, getRangeWithMax } from '~/utils/range/range'
 import { generateTimestamps } from '../../utils/generate-timestamps'
 import { addIfDefined } from './utils/add-if-defined'
 import {
   CostsProjectsFilter,
   getCostsProjects,
 } from './utils/get-costs-projects'
-import { getCostsTargetTimestamp } from './utils/get-costs-target-timestamp'
 import { CostsTimeRange, rangeToResolution } from './utils/range'
+
+const DENCUN_UPGRADE_TIMESTAMP = 1710288000
 
 export const CostsChartParams = z.object({
   range: CostsTimeRange,
   filter: CostsProjectsFilter,
+  previewRecategorisation: z.boolean().default(false),
 })
 export type CostsChartParams = z.infer<typeof CostsChartParams>
 
@@ -24,66 +27,104 @@ export type CostsChartParams = z.infer<typeof CostsChartParams>
  * @returns [timestamp, overheadGas, overheadEth, overheadUsd, calldataGas, calldataEth, calldataUsd, computeGas, computeEth, computeUsd, blobsGas, blobsEth, blobsUsd][] - all numbers
  */
 export function getCostsChart(
-  ...parameters: Parameters<typeof getCostsChartData>
+  ...parameters: Parameters<typeof getCachedCostsChartData>
 ) {
   if (env.MOCK) {
     return getMockCostsChartData(...parameters)
   }
-
-  return getCostsChartData(...parameters)
+  return getCachedCostsChartData(...parameters)
 }
 
-export type CostsChartData = Awaited<ReturnType<typeof getCostsChartData>>
-async function getCostsChartData({
-  range: timeRange,
-  filter,
-}: CostsChartParams) {
-  const projects = getCostsProjects(filter)
-  if (projects.length === 0) {
-    return []
-  }
-  const resolution = rangeToResolution(timeRange)
-  const targetTimestamp = getCostsTargetTimestamp()
-  const [from, to] = getRange(timeRange, resolution, { now: targetTimestamp })
+export type CostsChartData = Awaited<ReturnType<typeof getCachedCostsChartData>>
 
-  // one-off
-  const fromToQuery = from.add(-1, resolution === 'daily' ? 'days' : 'hours')
+export const getCachedCostsChartData = cache(
+  async ({
+    range: timeRange,
+    filter,
+    previewRecategorisation,
+  }: CostsChartParams) => {
+    const db = getDb()
+    const projects = await getCostsProjects(filter, previewRecategorisation)
+    if (projects.length === 0) {
+      return []
+    }
+    const resolution = rangeToResolution(timeRange)
+    const range = getRangeWithMax(timeRange, resolution)
 
-  // to is exclusive
-  const rangeForQuery: [UnixTime, UnixTime] = [fromToQuery, to]
+    const data = await db.aggregatedL2Cost.getByProjectsAndTimeRange(
+      projects.map((p) => p.id),
+      range,
+    )
 
-  const data = await db.aggregatedL2Cost.getByProjectsAndTimeRange(
-    projects.map((p) => p.id),
-    rangeForQuery,
-  )
+    if (data.length === 0) {
+      return []
+    }
 
-  if (data.length === 0) {
-    return []
-  }
+    const summedByTimestamp = sumByTimestamp(data, resolution)
 
-  const summedByTimestamp = sumByTimestamp(data, resolution)
-  const timestamps = generateTimestamps(
-    [fromToQuery, to.add(-1, resolution === 'daily' ? 'days' : 'hours')],
-    resolution,
-  )
-  const result = timestamps.map(
-    (timestamp) =>
-      summedByTimestamp.find((entry) => entry[0] === timestamp.toNumber()) ??
-      ([timestamp.toNumber(), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] as const),
-  )
-  return result
-}
+    const minTimestamp = UnixTime(Math.min(...summedByTimestamp.keys()))
+    const maxTimestamp = UnixTime(Math.max(...summedByTimestamp.keys()))
+
+    const timestamps = generateTimestamps(
+      [minTimestamp, maxTimestamp],
+      resolution,
+    )
+    const result = timestamps.map((timestamp) => {
+      const entry = summedByTimestamp.get(timestamp)
+      const blobsFallback =
+        timestamp >= DENCUN_UPGRADE_TIMESTAMP ? 0 : undefined
+      if (!entry) {
+        return [
+          timestamp,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          blobsFallback,
+          blobsFallback,
+          blobsFallback,
+        ] as const
+      }
+      return [
+        timestamp,
+        entry.overheadGas,
+        entry.overheadGasEth,
+        entry.overheadGasUsd,
+        entry.calldataGas,
+        entry.calldataGasEth,
+        entry.calldataGasUsd,
+        entry.computeGas,
+        entry.computeGasEth,
+        entry.computeGasUsd,
+        entry.blobsGas ?? blobsFallback,
+        entry.blobsGasEth ?? blobsFallback,
+        entry.blobsGasUsd ?? blobsFallback,
+      ] as const
+    })
+    return result
+  },
+  ['costs-chart-data'],
+  {
+    tags: ['hourly-data'],
+    revalidate: UnixTime.HOUR,
+  },
+)
 
 function getMockCostsChartData({
   range: timeRange,
 }: CostsChartParams): CostsChartData {
   const resolution = rangeToResolution(timeRange)
-  const range = getRange(timeRange, resolution)
+  const range = getRange(timeRange === 'max' ? '1y' : timeRange, resolution)
 
   const timestamps = generateTimestamps(range, resolution)
 
   return timestamps.map((timestamp) => [
-    timestamp.toNumber(),
+    timestamp,
     20000,
     0.5,
     1000,
@@ -122,9 +163,11 @@ function sumByTimestamp(
   >()
 
   for (const record of records) {
-    const timestamp = record.timestamp
-      .toStartOf(resolution === 'daily' ? 'day' : 'hour')
-      .toNumber()
+    const timestamp = UnixTime.toStartOf(
+      record.timestamp,
+      resolution === 'daily' ? 'day' : 'hour',
+    )
+
     const existing = result.get(timestamp)
     if (existing) {
       result.set(timestamp, {
@@ -160,24 +203,5 @@ function sumByTimestamp(
     })
   }
 
-  const asArray = Array.from(result.entries()).map(
-    ([timestamp, record]) =>
-      [
-        timestamp,
-        record.overheadGas,
-        record.overheadGasEth,
-        record.overheadGasUsd,
-        record.calldataGas,
-        record.calldataGasEth,
-        record.calldataGasUsd,
-        record.computeGas,
-        record.computeGasEth,
-        record.computeGasUsd,
-        record.blobsGas,
-        record.blobsGasEth,
-        record.blobsGasUsd,
-      ] as const,
-  )
-
-  return asArray
+  return result
 }

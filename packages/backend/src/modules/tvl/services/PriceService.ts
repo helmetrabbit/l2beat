@@ -1,17 +1,17 @@
-import { Logger } from '@l2beat/backend-tools'
-import { Database, PriceRecord } from '@l2beat/database'
+import type { Logger } from '@l2beat/backend-tools'
+import type { Database, PriceRecord } from '@l2beat/database'
 import {
   CoingeckoQueryService,
-  PriceProvider,
-  QueryResultPoint,
+  type PriceProvider,
+  type QueryResultPoint,
 } from '@l2beat/shared'
 import {
   assert,
-  CoingeckoId,
-  CoingeckoPriceConfigEntry,
+  type CoingeckoId,
+  type CoingeckoPriceConfigEntry,
   UnixTime,
 } from '@l2beat/shared-pure'
-import { Configuration } from '../../../tools/uif/multi/types'
+import type { Configuration } from '../../../tools/uif/multi/types'
 
 export interface PriceServiceDependencies {
   readonly priceProvider: PriceProvider
@@ -20,7 +20,11 @@ export interface PriceServiceDependencies {
 }
 
 export class PriceService {
-  constructor(private readonly $: PriceServiceDependencies) {}
+  logger: Logger
+
+  constructor(private readonly $: PriceServiceDependencies) {
+    this.logger = this.$.logger.for(this)
+  }
 
   async getPrices(
     from: UnixTime,
@@ -44,8 +48,8 @@ export class PriceService {
       .map((c) =>
         prices
           .filter((p) =>
-            p.timestamp.gte(new UnixTime(c.minHeight)) && c.maxHeight
-              ? p.timestamp.lte(new UnixTime(c.maxHeight))
+            p.timestamp >= UnixTime(c.minHeight) && c.maxHeight
+              ? p.timestamp <= UnixTime(c.maxHeight)
               : true,
           )
           .map((p) => ({
@@ -70,12 +74,12 @@ export class PriceService {
         to,
       )
     } catch (error) {
-      const latestHour = assertLatestHour(coingeckoId, from, to, error)
+      assertLatestHour(from, to, error, coingeckoId, this.logger)
 
       const priceFromDb = await this.getLatestPriceFromDb(
-        coingeckoId,
-        latestHour,
+        to,
         configurations,
+        coingeckoId,
       )
 
       return [priceFromDb]
@@ -83,47 +87,55 @@ export class PriceService {
   }
 
   private async getLatestPriceFromDb(
-    coingeckoId: CoingeckoId,
     latestHour: UnixTime,
     configurations: Configuration<CoingeckoPriceConfigEntry>[],
+    coingeckoId: CoingeckoId,
   ) {
-    const records = await this.$.database.price.getByConfigIdsInRange(
+    const fallbackPrice = await this.$.database.price.getLatestPrice(
       configurations.map((c) => c.id),
-      latestHour,
-      latestHour,
     )
 
-    const fallback = records.find((r) => r.timestamp.equals(latestHour))
+    assert(fallbackPrice, `No price not found for ${coingeckoId}`)
 
-    assert(fallback, `DB fallback failed: ${coingeckoId}`)
-
-    this.$.logger.error(
-      'DB fallback triggered: failed to fetch price from Coingecko',
-      { coingeckoId, latestHour: latestHour.toNumber() },
+    this.logger.warn(
+      `${coingeckoId}: DB fallback triggered: failed to fetch price from Coingecko`,
+      {
+        coingeckoId,
+        latestHour: latestHour,
+        fallbackPrice: fallbackPrice.priceUsd,
+      },
     )
+
     return {
-      value: fallback.priceUsd,
-      timestamp: fallback.timestamp,
+      timestamp: latestHour,
+      value: fallbackPrice.priceUsd,
     }
   }
 
   calculateAdjustedTo(from: number, to: number): UnixTime {
     return CoingeckoQueryService.calculateAdjustedTo(
-      new UnixTime(from),
-      new UnixTime(to),
+      UnixTime(from),
+      UnixTime(to),
     )
   }
 }
 
 function assertLatestHour(
-  coingeckoId: CoingeckoId,
   from: UnixTime,
   to: UnixTime,
   error: unknown,
+  coingeckoId: CoingeckoId,
+  logger: Logger,
 ) {
-  const diff = to.toNumber() - from.toNumber()
-  if (diff >= 3600) throw error
-  assert(to.isFull('hour'), `DB fallback failed: ${coingeckoId}`)
+  const diff = to - from
+  if (diff >= 3600) {
+    logger.error(`Timestamps diff to large to perform fallback`, { diff })
+    throw error
+  }
+  assert(
+    UnixTime.isFull(to, 'hour'),
+    `Latest hour assert failed for ${coingeckoId} <${from},${to}>`,
+  )
 
   return to
 }

@@ -1,5 +1,6 @@
 import { UnixTime } from '@l2beat/shared-pure'
 import { z } from 'zod'
+import { MIN_TIMESTAMPS } from '~/consts/min-timestamps'
 import { rangeToDays } from '~/utils/range/range-to-days'
 
 export const CostsTimeRange = z.union([
@@ -8,6 +9,8 @@ export const CostsTimeRange = z.union([
   z.literal('30d'),
   z.literal('90d'),
   z.literal('180d'),
+  z.literal('1y'),
+  z.literal('max'),
 ])
 export type CostsTimeRange = z.infer<typeof CostsTimeRange>
 
@@ -21,17 +24,17 @@ export function getFullySyncedCostsRange(
 ): [UnixTime, UnixTime] {
   const days = rangeToDays(range)
 
-  const startOfDay = UnixTime.now().toStartOf('day')
+  const startOfDay = UnixTime.toStartOf(UnixTime.now(), 'day')
 
   const end = startOfDay
-  const start = end.add(-days, 'days')
+  const start = days !== null ? end - days * UnixTime.DAY : MIN_TIMESTAMPS.costs
   return [start, end]
 }
 
 export type CostsResolution = ReturnType<typeof rangeToResolution>
 export function rangeToResolution(value: CostsTimeRange) {
   const days = rangeToDays(value)
-  if (days < 30) {
+  if (days && days < 30) {
     return 'hourly'
   }
 

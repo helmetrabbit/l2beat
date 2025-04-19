@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { PercentChange } from '~/components/percent-change'
 import { cn } from '~/utils/cn'
 
@@ -15,6 +15,7 @@ export function ValueWithPercentageChange({
   change,
   className,
   containerClassName,
+  changeClassName,
 }: Props) {
   return (
     <div className={cn('flex items-center', containerClassName)}>
@@ -22,7 +23,11 @@ export function ValueWithPercentageChange({
         {children}
       </span>
       {change !== undefined && (
-        <PercentChange value={change} className="ml-1 font-medium" />
+        <PercentChange
+          value={change}
+          className="ml-1 font-medium"
+          textClassName={changeClassName}
+        />
       )}
     </div>
   )

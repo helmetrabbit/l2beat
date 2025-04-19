@@ -1,6 +1,6 @@
+import { createAmountId, createPriceId } from '@l2beat/backend-shared'
 import { Logger } from '@l2beat/backend-tools'
-import { createAmountId, createPriceId } from '@l2beat/config'
-import { Database } from '@l2beat/database'
+import type { Database } from '@l2beat/database'
 import {
   AssetId,
   EthereumAddress,
@@ -8,13 +8,13 @@ import {
   UnixTime,
 } from '@l2beat/shared-pure'
 import { expect, mockObject } from 'earl'
-import { IndexerService } from '../../../tools/uif/IndexerService'
+import type { IndexerService } from '../../../tools/uif/IndexerService'
 import { _TEST_ONLY_resetUniqueIds } from '../../../tools/uif/ids'
-import { ValueService } from '../services/ValueService'
-import { SyncOptimizer } from '../utils/SyncOptimizer'
+import type { ValueService } from '../services/ValueService'
+import type { SyncOptimizer } from '../utils/SyncOptimizer'
 import { MOCKS_FOR_TVL } from '../utils/test/mocks'
 import { ValueIndexer } from './ValueIndexer'
-import { ValueIndexerDeps } from './types'
+import type { ValueIndexerDeps } from './types'
 
 const { priceConfiguration, amountConfiguration, valueRecord } = MOCKS_FOR_TVL
 
@@ -84,7 +84,7 @@ describe(ValueIndexer.name, () => {
     })
 
     it('calculates and saves to DB', async () => {
-      const timestamps = [new UnixTime(100), new UnixTime(200)]
+      const timestamps = [UnixTime(100), UnixTime(200)]
 
       const syncOptimizer = mockObject<SyncOptimizer>({
         getTimestampsToSync: () => timestamps,
@@ -123,7 +123,7 @@ describe(ValueIndexer.name, () => {
       const to = 1000
       const safeHeight = await indexer.update(from, to)
 
-      expect(safeHeight).toEqual(timestamps[1].toNumber())
+      expect(safeHeight).toEqual(timestamps[1])
       expect(syncOptimizer.getTimestampsToSync).toHaveBeenOnlyCalledWith(
         from,
         to,

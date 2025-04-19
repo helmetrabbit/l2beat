@@ -1,5 +1,6 @@
-import { type TrackedTxConfigEntry } from '@l2beat/shared'
-import { type SavedConfiguration, UnixTime } from '@l2beat/shared-pure'
+import type { TrackedTxConfigEntry } from '@l2beat/shared'
+import type { SavedConfiguration } from '@l2beat/shared-pure'
+import { UnixTime } from '@l2beat/shared-pure'
 import { partition } from 'lodash'
 
 export function getConfigurationsSyncedUntil(
@@ -32,5 +33,5 @@ export function getConfigurationsSyncedUntil(
   }
 
   const syncedUntil = Math.min(...lastSyncedTimestamps)
-  return new UnixTime(syncedUntil)
+  return UnixTime(syncedUntil)
 }

@@ -1,8 +1,8 @@
 import { config as dotenv } from 'dotenv'
 
-export function getEnv(): Env {
+export function getEnv(overrides?: Record<string, string | undefined>): Env {
   dotenv()
-  return new Env({ ...process.env })
+  return new Env({ ...process.env, ...overrides })
 }
 
 export class Env {
@@ -22,6 +22,10 @@ export class Env {
     }
     const value = this.env[key]
     return value !== undefined ? { value, key } : value
+  }
+
+  static key(...inputs: string[]): string {
+    return inputs.join('_').replace(/-/g, '').toUpperCase()
   }
 
   string(key: string | string[], fallback?: string): string {
